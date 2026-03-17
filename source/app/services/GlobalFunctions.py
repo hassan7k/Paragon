@@ -1,4 +1,7 @@
 import re
+import hashlib
+import secrets
+
 NI_REGEX = re.compile(r"^[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]$") # basically just lets me reuse this so i dont have to re-parse a pattern all the time, needs 6 numbers, ends with a letter A-D, can't start with a certain 2 letters
 
 def Normalise_NI(NI: str) -> str:
@@ -40,3 +43,31 @@ def ValidateEmail(Email: str) -> str:
     
     if "@" not in Email or Email.startswith("@") or Email.endswith("@"):
         raise ValueError("Invalid email.")
+   
+    return Email
+
+class PasswordFunctions:
+
+    @staticmethod
+    def HashPassword(Password: str):
+        if not Password or not Password.strip():
+            raise ValueError("Password is required.")
+        
+        Salt = secrets.token_hex(16)
+        HashedPassword = hashlib.sha256((Salt + Password).encode()).hexdigest()
+
+        return f"{Salt}${HashedPassword}"
+    
+    @staticmethod
+    def VerifyPassword(PlainPassword: str, StoredPassword: str) -> bool:
+        if not PlainPassword or not StoredPassword:
+            return False
+     
+        try:
+            Salt, StoredHash = StoredPassword.split("$")
+        except ValueError:
+            return False
+    
+        CalculatedHash = hashlib.sha256((Salt + PlainPassword).encode()).hexdigest()
+        return CalculatedHash == StoredHash
+

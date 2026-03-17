@@ -1,11 +1,11 @@
 import sqlite3
-from app.databases.Database import Get_Connection
+from source.app.databases.Database import Get_Connection
 from source.app.services.GlobalFunctions import (
     ValidateEmail, ValidateNI, ValidatePhone
 )
 
 class TenantService:
-
+    @staticmethod
     def AddTenant(
             NI_number: str, 
             FirstName: str, 
@@ -40,7 +40,7 @@ class TenantService:
         
         except sqlite3.IntegrityError as FailError:
             Connection.rollback()
-            raise ValueError("Tenant already exists - duplicate NI") from FailError
+            raise ValueError(f"DB integrity error: {FailError}") from FailError
         
         except Exception:
             Connection.rollback()

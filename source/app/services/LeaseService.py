@@ -1,10 +1,10 @@
 import sqlite3
 from datetime import date
-from app.databases.Database import Get_Connection
+from source.app.databases.Database import Get_Connection
 
 class LeaseService:
-    
-    def CreateLease(
+    @staticmethod
+    def CreateLeaseWithInitialInvoice(
             TenantId: int,
             ApartmentId: int,
             StartDate: str,
