@@ -118,7 +118,12 @@ def Create_Tables():
         description TEXT NOT NULL,
         priority TEXT NOT NULL CHECK(priority IN ('LOW','MEDIUM','HIGH')),
         status TEXT NOT NULL DEFAULT 'REPORTED'
-            CHECK(status IN ('REPORTED','IN_PROGRESS','RESOLVED')),
+            CHECK(status IN ('REPORTED','SCHEDULED','IN_PROGRESS','RESOLVED')),
+        assigned_worker TEXT,
+        scheduled_date TEXT,
+        scheduled_time TEXT,
+        resolution_notes TEXT,
+        time_taken_hours REAL CHECK(time_taken_hours >= 0),
         reported_date TEXT DEFAULT CURRENT_TIMESTAMP,
         resolved_date TEXT,
         cost REAL CHECK(cost >= 0),
@@ -148,6 +153,9 @@ def Create_Tables():
     Cursor.execute("CREATE INDEX IF NOT EXISTS idx_invoice_lease ON Invoice(lease_id);")
     Cursor.execute("CREATE INDEX IF NOT EXISTS idx_payment_invoice ON Payment(invoice_id);")
     Cursor.execute("CREATE INDEX IF NOT EXISTS idx_maintenance_apartment ON MaintenanceRequest(apartment_id);")
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_maintenance_status ON MaintenanceRequest(status);")
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_maintenance_priority ON MaintenanceRequest(priority);")
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_maintenance_tenant ON MaintenanceRequest(tenant_id);")
 
     Connection.commit()
     Connection.close()
