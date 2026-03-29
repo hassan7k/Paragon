@@ -1,10 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
-
+from source.app.controllers.Lease import LeaseController
 from source.app.controllers.Tenants import TenantController
-from source.app.services.LeaseService import LeaseService
-from source.app.services.PaymentService import PaymentService
-from source.app.services.MaintenanceService import MaintenanceService
 
 
 class TenantUI:
@@ -38,7 +35,7 @@ class TenantUI:
         self.nav_button(sidebar, "Complaints", self.show_complaints)
 
         tk.Button(sidebar, text="Logout",
-                  bg="darkred", fg="white",
+                  bg="red", fg="black",
                   command=self.logout).pack(side="bottom", pady=20)
 
         # Content
@@ -72,7 +69,12 @@ class TenantUI:
         tk.Label(search_frame, text="Search",
                  bg="#1e293b", fg="white").pack(side="left")
 
-        self.search_entry = tk.Entry(search_frame, bg="#020617", fg="white")
+        self.search_var = tk.StringVar()
+        self.search_var.trace("w", self.live_search)
+
+        self.search_entry = tk.Entry(search_frame,
+                                    textvariable=self.search_var,
+                                    bg="#020617", fg="white")
         self.search_entry.pack(side="left", padx=10)
 
         tk.Label(search_frame, text="Occupation",
@@ -93,13 +95,13 @@ class TenantUI:
         table_frame = tk.Frame(self.content)
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        columns = ("ID", "NI", "First", "Last", "Phone", "Email", "Occupation")
+        columns = ("ID", "NI", "First", "Last", "Phone", "Email", "Occupation", "Requirement", "Lease")
 
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings")
 
         for col in columns:
             self.tree.heading(col, text=col)
-            self.tree.column(col, anchor="center", width=120)
+            self.tree.column(col, anchor="center", width=110)
 
         self.tree.pack(fill="both", expand=True)
 
@@ -116,6 +118,14 @@ class TenantUI:
         self.email = self.field(form, "Email")
         self.occupation = self.field(form, "Occupation")
         self.reference = self.field(form, "Reference")
+        self.requirement = self.field(form, "Apartment Type")
+        self.lease_years = self.field(form, "Lease Years")
+
+        # 🔥 NEW FIELDS
+        self.apartment_req = self.field(form, "Apartment Req")
+        self.lease_years = self.field(form, "Lease Years")
+        self.priority = self.field(form, "Priority")
+        self.notes = self.field(form, "Notes")
 
         btns = tk.Frame(form, bg="#1e293b")
         btns.pack(pady=10)
@@ -131,11 +141,12 @@ class TenantUI:
 
         self.load_all_tenants()
 
+    # ---------------- FIELD ----------------
     def field(self, parent, label):
         frame = tk.Frame(parent, bg="#1e293b")
         frame.pack(fill="x", padx=10, pady=5)
 
-        tk.Label(frame, text=label, width=12,
+        tk.Label(frame, text=label, width=14,
                  bg="#1e293b", fg="#cbd5f5").pack(side="left")
 
         entry = tk.Entry(frame, bg="#020617", fg="white", insertbackground="white")
@@ -143,9 +154,9 @@ class TenantUI:
 
         return entry
 
+    # ---------------- DATA ----------------
     def load_all_tenants(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
+        self.tree.delete(*self.tree.get_children())
 
         tenants = TenantController.GetAllTenants()
 
@@ -158,12 +169,22 @@ class TenantUI:
 
         results = TenantController.SearchTenants(keyword, occ)
 
-        for row in self.tree.get_children():
-            self.tree.delete(row)
+        self.tree.delete(*self.tree.get_children())
 
         for r in results:
             self.tree.insert("", "end", values=r)
 
+    def live_search(self, *args):
+        keyword = self.search_var.get()
+
+        results = TenantController.SearchTenants(keyword, "")
+
+        self.tree.delete(*self.tree.get_children())
+
+        for r in results:
+            self.tree.insert("", "end", values=r)
+
+    # ---------------- FORM AUTO-FILL ----------------
     def fill_form(self, event):
         selected = self.tree.focus()
         data = self.tree.item(selected, "values")
@@ -171,30 +192,33 @@ class TenantUI:
         if not data:
             return
 
-        self.ni.delete(0, tk.END)
-        self.ni.insert(0, data[1])
+        fields = [
+            self.ni, self.first, self.last, self.phone,
+            self.email, self.occupation
+        ]
 
-        self.first.delete(0, tk.END)
-        self.first.insert(0, data[2])
+        for i, field in enumerate(fields, start=1):
+            field.delete(0, tk.END)
+            field.insert(0, data[i])
 
-        self.last.delete(0, tk.END)
-        self.last.insert(0, data[3])
+        if len(data) > 7:
+            self.apartment_req.insert(0, data[7])
+        if len(data) > 8:
+            self.lease_years.insert(0, data[8])
 
-        self.phone.delete(0, tk.END)
-        self.phone.insert(0, data[4])
-
-        self.email.delete(0, tk.END)
-        self.email.insert(0, data[5])
-
-        self.occupation.delete(0, tk.END)
-        self.occupation.insert(0, data[6])
-
+    # ---------------- ACTIONS ----------------
     def add_tenant(self):
         try:
             TenantController.AddTenant(
-                self.ni.get(), self.first.get(), self.last.get(),
-                self.phone.get(), self.email.get(),
-                self.occupation.get(), self.reference.get()
+                self.ni.get(),
+                self.first.get(),
+                self.last.get(),
+                self.phone.get(),
+                self.email.get(),
+                self.occupation.get(),
+                self.reference.get(),
+                self.requirement.get(),
+                self.lease_years.get()
             )
             self.load_all_tenants()
         except Exception as e:
@@ -203,9 +227,15 @@ class TenantUI:
     def update_tenant(self):
         try:
             TenantController.UpdateTenant(
-                self.ni.get(), self.first.get(), self.last.get(),
-                self.phone.get(), self.email.get(),
-                self.occupation.get(), self.reference.get()
+                self.ni.get(),
+                self.first.get(),
+                self.last.get(),
+                self.phone.get(),
+                self.email.get(),
+                self.occupation.get(),
+                self.reference.get(),
+                self.requirement.get(),
+                self.lease_years.get()
             )
             self.load_all_tenants()
         except Exception as e:
@@ -219,11 +249,45 @@ class TenantUI:
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
-    # ---------------- OTHER SECTIONS ----------------
+    # ---------------- OTHER ----------------
     def show_lease(self):
         self.clear_content()
-        tk.Label(self.content, text="Lease Section",
-                 fg="black", bg="#0f172a").pack()
+
+        tk.Label(self.content, text="Lease Management",
+                fg="white", bg="#0f172a",
+                font=("Arial", 20, "bold")).pack(pady=10)
+
+        # TABLE
+        frame = tk.Frame(self.content)
+        frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        columns = ("LeaseID", "First Name", "Last Name", "Apartment", "Start", "End", "Status")
+
+        self.lease_table = ttk.Treeview(frame, columns=columns, show="headings")
+
+        for col in columns:
+            self.lease_table.heading(col, text=col)
+            self.lease_table.column(col, anchor="center", width=120)
+
+        self.lease_table.pack(fill="both", expand=True)
+
+        # LOAD DATA
+        leases = LeaseController.GetAllLeases()
+
+        for l in leases:
+            self.lease_table.insert("", "end", values=l)
+
+        # ACTIONS
+        action_frame = tk.Frame(self.content, bg="#0f172a")
+        action_frame.pack(pady=10)
+
+        tk.Button(action_frame, text="Generate Invoice",
+                bg="#3b82f6", fg="white",
+                command=self.generate_invoice).grid(row=0, column=0, padx=10)
+
+        tk.Button(action_frame, text="Terminate Lease",
+                bg="#ef4444", fg="white",
+                command=self.terminate_lease).grid(row=0, column=1, padx=10)
 
     def show_payments(self):
         self.clear_content()
@@ -244,3 +308,33 @@ class TenantUI:
     def logout(self):
         self.window.destroy()
         self.parent.deiconify()
+
+    def generate_invoice(self):
+        selected = self.lease_table.focus()
+        data = self.lease_table.item(selected, "values")
+
+        if not data:
+            messagebox.showwarning("Select", "Select a lease first")
+            return
+
+        lease_id = data[0]
+
+        try:
+            LeaseController.GenerateInvoice(lease_id)
+            messagebox.showinfo("Success", "Invoice generated")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+
+    def terminate_lease(self):
+        ni = self.ni.get()
+
+        if not ni:
+            messagebox.showwarning("Input", "Enter tenant NI")
+            return
+
+        try:
+            penalty = LeaseController.TerminateLease(ni)
+            messagebox.showinfo("Terminated", f"Penalty: £{penalty:.2f}")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))

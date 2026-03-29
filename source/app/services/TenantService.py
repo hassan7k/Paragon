@@ -3,301 +3,194 @@ from source.app.databases.database import Get_Connection
 from source.app.services.GlobalFunctions import (
     ValidateEmail, ValidateNI, ValidatePhone
 )
-
+from source.app.services.LeaseService import LeaseService
+from datetime import datetime, timedelta
 
 class TenantService:
 
     # ---------------- ADD TENANT ----------------
     @staticmethod
-    def AddTenant(
-        NI_number: str,
-        FirstName: str,
-        LastName: str,
-        Phone: str,
-        Email: str,
-        Occupation: str | None = None,
-        TenantReference: str | None = None
-    ) -> int:
+    def AddTenant(ni, first, last, phone, email,
+                  occupation, reference,
+                  requirement, lease_years):
 
-        # Clean + validate
-        NI_number = ValidateNI(NI_number.strip())
-        Phone = ValidatePhone(Phone.strip())
-        Email = ValidateEmail(Email.strip())
-        FirstName = FirstName.strip()
-        LastName = LastName.strip()
+        ni = ValidateNI(ni)
+        phone = ValidatePhone(phone)
+        email = ValidateEmail(email)
 
-        if not FirstName:
-            raise ValueError("First name is required.")
-        if not LastName:
-            raise ValueError("Last name is required.")
+        if not first.strip() or not last.strip():
+            raise ValueError("Name required")
 
         conn = Get_Connection()
+        cur = conn.cursor()
 
         try:
-            cur = conn.cursor()
-
             cur.execute("""
-                INSERT INTO Tenant 
-                (ni_number, first_name, last_name, phone, email, occupation, tenant_references)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO Tenant (
+                ni_number, first_name, last_name,
+                phone, email, occupation, tenant_references,
+                apartment_requirement, preferred_lease_years
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                NI_number,
-                FirstName,
-                LastName,
-                Phone,
-                Email,
-                Occupation,
-                TenantReference
-            ))
-
-            tenant_id = cur.lastrowid
-            conn.commit()
-            return tenant_id
-
-        except sqlite3.IntegrityError as e:
-            conn.rollback()
-
-            if "ni_number" in str(e).lower():
-                raise ValueError("Tenant with this NI already exists.")
-
-            raise ValueError("Database integrity error.")
-
-        except Exception as e:
-            conn.rollback()
-            raise RuntimeError(f"Unexpected error: {e}")
-
-        finally:
-            conn.close()
-
-    # ---------------- UPDATE TENANT ----------------
-    @staticmethod
-    def UpdateTenant(
-        NI_number: str,
-        FirstName: str,
-        LastName: str,
-        Phone: str,
-        Email: str,
-        Occupation: str | None = None,
-        TenantReference: str | None = None
-    ) -> None:
-
-        NI_number = ValidateNI(NI_number.strip())
-        Phone = ValidatePhone(Phone.strip())
-        Email = ValidateEmail(Email.strip())
-        FirstName = FirstName.strip()
-        LastName = LastName.strip()
-
-        if not FirstName:
-            raise ValueError("First name is required.")
-        if not LastName:
-            raise ValueError("Last name is required.")
-
-        conn = Get_Connection()
-
-        try:
-            cur = conn.cursor()
-
-            # Check exists
-            cur.execute("SELECT tenant_id FROM Tenant WHERE ni_number=?", (NI_number,))
-            if not cur.fetchone():
-                raise ValueError("Tenant not found.")
-
-            cur.execute("""
-                UPDATE Tenant
-                SET first_name=?, last_name=?, phone=?, email=?, occupation=?, tenant_references=?
-                WHERE ni_number=?
-            """, (
-                FirstName,
-                LastName,
-                Phone,
-                Email,
-                Occupation,
-                TenantReference,
-                NI_number
+                ni, first, last, phone, email,
+                occupation, reference,
+                requirement, lease_years
             ))
 
             conn.commit()
 
-        except Exception as e:
+        except sqlite3.IntegrityError:
             conn.rollback()
-            raise RuntimeError(f"Update failed: {e}")
+            raise ValueError("Tenant already exists")
 
         finally:
             conn.close()
 
-    # ---------------- SEARCH TENANT ----------------
+    # ---------------- GET TENANT ----------------
     @staticmethod
-    def SearchTenants(keyword: str = "", occupation: str = ""):
+    def GetTenant(ni):
         conn = Get_Connection()
+        cur = conn.cursor()
 
-        try:
-            cur = conn.cursor()
+        cur.execute("SELECT * FROM Tenant WHERE ni_number=?", (ni,))
+        row = cur.fetchone()
+        conn.close()
 
-            query = """
-            SELECT tenant_id, ni_number, first_name, last_name, phone, email, occupation
-            FROM Tenant
-            WHERE 1=1
-            """
-            params = []
+        if not row:
+            return None
 
-            if keyword:
-                query += """
-                AND (
-                    ni_number LIKE ?
-                    OR first_name LIKE ?
-                    OR last_name LIKE ?
-                    OR email LIKE ?
-                )
-                """
-                k = f"%{keyword}%"
-                params.extend([k, k, k, k])
+        return {
+            "tenant_id": row[0],
+            "ni_number": row[1],
+            "first_name": row[2],
+            "last_name": row[3],
+            "phone": row[4],
+            "email": row[5],
+            "occupation": row[6],
+            "tenant_references": row[7],
+            "requirement": row[8],
+            "lease_years": row[9]
+        }
 
-            if occupation:
-                query += " AND occupation LIKE ?"
-                params.append(f"%{occupation}%")
-
-            cur.execute(query, params)
-            return cur.fetchall()
-
-        finally:
-            conn.close()
-            
-    # ---------------- DELETE TENANT ----------------
+    # ---------------- SEARCH ----------------
     @staticmethod
-    def DeleteTenant(NI_number: str) -> None:
-
-        NI_number = ValidateNI(NI_number.strip())
-
+    def Search(keyword=""):
         conn = Get_Connection()
+        cur = conn.cursor()
 
-        try:
-            cur = conn.cursor()
+        query = """
+        SELECT tenant_id, ni_number, first_name, last_name, phone, email, occupation
+        FROM Tenant
+        WHERE ni_number LIKE ? OR first_name LIKE ? OR last_name LIKE ?
+        """
 
-            cur.execute("SELECT tenant_id FROM Tenant WHERE ni_number=?", (NI_number,))
-            tenant = cur.fetchone()
+        k = f"%{keyword}%"
+        cur.execute(query, (k, k, k))
 
-            if not tenant:
-                raise ValueError("Tenant not found.")
+        data = cur.fetchall()
+        conn.close()
+        return data
 
-            tenant_id = tenant[0]
-
-            # Prevent deleting if active lease exists
-            cur.execute("""
-                SELECT lease_id FROM Lease 
-                WHERE tenant_id=? AND status='ACTIVE'
-            """, (tenant_id,))
-
-            if cur.fetchone():
-                raise ValueError("Cannot delete tenant with active lease.")
-
-            cur.execute("DELETE FROM Tenant WHERE tenant_id=?", (tenant_id,))
-            conn.commit()
-
-        except Exception as e:
-            conn.rollback()
-            raise RuntimeError(f"Delete failed: {e}")
-
-        finally:
-            conn.close()
-
-    # ---------------- GET SINGLE TENANT ----------------
+    # ---------------- UPDATE ----------------
     @staticmethod
-    def GetTenant(NI_number: str):
-
-        NI_number = ValidateNI(NI_number.strip())
+    def UpdateTenant(ni, first, last, phone, email,
+                     occupation, reference, requirement, lease_years):
 
         conn = Get_Connection()
+        cur = conn.cursor()
 
-        try:
-            cur = conn.cursor()
+        cur.execute("""
+        UPDATE Tenant
+        SET first_name=?, last_name=?, phone=?, email=?,
+            occupation=?, tenant_references=?,
+            apartment_requirement=?, preferred_lease_years=?
+        WHERE ni_number=?
+        """, (
+            first, last, phone, email,
+            occupation, reference,
+            requirement, lease_years, ni
+        ))
 
-            cur.execute("SELECT * FROM Tenant WHERE ni_number=?", (NI_number,))
-            t = cur.fetchone()
+        conn.commit()
+        conn.close()
 
-            if not t:
-                return None
-
-            return {
-                "tenant_id": t[0],
-                "ni_number": t[1],
-                "first_name": t[2],
-                "last_name": t[3],
-                "phone": t[4],
-                "email": t[5],
-                "occupation": t[6],
-                "tenant_references": t[7]
-            }
-
-        finally:
-            conn.close()
-
-    # ---------------- GET ALL TENANTS ----------------
+    # ---------------- DELETE ----------------
     @staticmethod
-    def GetAllTenants():
-
+    def DeleteTenant(ni):
         conn = Get_Connection()
+        cur = conn.cursor()
 
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM Tenant")
-            return cur.fetchall()
+        cur.execute("DELETE FROM Tenant WHERE ni_number=?", (ni,))
+        conn.commit()
+        conn.close()
 
-        finally:
-            conn.close()
-
-    # ---------------- ADD COMPLAINT ----------------
+    # ---------------- COMPLAINT ----------------
     @staticmethod
-    def AddComplaint(NI_number: str, description: str):
-
-        if not description.strip():
-            raise ValueError("Complaint cannot be empty.")
-
-        NI_number = ValidateNI(NI_number.strip())
-
+    def AddComplaint(ni, desc):
         conn = Get_Connection()
+        cur = conn.cursor()
 
-        try:
-            cur = conn.cursor()
+        cur.execute("SELECT tenant_id FROM Tenant WHERE ni_number=?", (ni,))
+        t = cur.fetchone()
 
-            cur.execute("SELECT tenant_id FROM Tenant WHERE ni_number=?", (NI_number,))
-            tenant = cur.fetchone()
+        if not t:
+            raise ValueError("Tenant not found")
 
-            if not tenant:
-                raise ValueError("Tenant not found.")
+        cur.execute("""
+        INSERT INTO Complaint (tenant_id, description)
+        VALUES (?, ?)
+        """, (t[0], desc))
 
-            tenant_id = tenant[0]
-
-            cur.execute("""
-                INSERT INTO Complaint (tenant_id, description)
-                VALUES (?, ?)
-            """, (tenant_id, description))
-
-            conn.commit()
-
-        except Exception as e:
-            conn.rollback()
-            raise RuntimeError(f"Failed to add complaint: {e}")
-
-        finally:
-            conn.close()
-
-    # ---------------- REPORTS (HIGH MARK FEATURE) ----------------
-    @staticmethod
-    def CountTenants():
-        conn = Get_Connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM Tenant")
-            return cur.fetchone()[0]
-        finally:
-            conn.close()
+        conn.commit()
+        conn.close()
 
     @staticmethod
-    def CountComplaints():
+    def GetComplaints():
         conn = Get_Connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM Complaint")
-            return cur.fetchone()[0]
-        finally:
-            conn.close()
+        cur = conn.cursor()
+
+        cur.execute("""
+        SELECT t.first_name, c.description, c.status
+        FROM Complaint c
+        JOIN Tenant t ON c.tenant_id = t.tenant_id
+        """)
+
+        data = cur.fetchall()
+        conn.close()
+        return data
+
+    # ---------------- MAINTENANCE ----------------
+    @staticmethod
+    def AddMaintenance(ni, apartment_id, desc):
+        conn = Get_Connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT tenant_id FROM Tenant WHERE ni_number=?", (ni,))
+        t = cur.fetchone()
+
+        if not t:
+            raise ValueError("Tenant not found")
+
+        cur.execute("""
+        INSERT INTO MaintenanceRequest (tenant_id, apartment_id, description, priority)
+        VALUES (?, ?, ?, 'MEDIUM')
+        """, (t[0], apartment_id, desc))
+
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def GetMaintenance():
+        conn = Get_Connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+        SELECT t.first_name, m.apartment_id, m.description, m.status
+        FROM MaintenanceRequest m
+        JOIN Tenant t ON m.tenant_id = t.tenant_id
+        """)
+
+        data = cur.fetchall()
+        conn.close()
+        return data

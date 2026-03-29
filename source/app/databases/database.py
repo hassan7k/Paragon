@@ -39,15 +39,17 @@ def Create_Tables():
     # Tenant table
     Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Tenant (
-        tenant_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ni_number TEXT NOT NULL UNIQUE,
-        first_name TEXT NOT NULL,
-        last_name TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        email TEXT NOT NULL,
-        occupation TEXT,
-        tenant_references TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    tenant_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ni_number TEXT NOT NULL UNIQUE,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    email TEXT NOT NULL,
+    occupation TEXT,
+    tenant_references TEXT,
+    apartment_requirement TEXT,
+    preferred_lease_years INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
     """)
 
