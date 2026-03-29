@@ -1,6 +1,10 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
+
 from source.app.controllers.Tenants import TenantController
+from source.app.services.LeaseService import LeaseService
+from source.app.services.PaymentService import PaymentService
+from source.app.services.MaintenanceService import MaintenanceService
 
 
 class TenantUI:
@@ -10,249 +14,233 @@ class TenantUI:
         self.user = user
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Tenant Dashboard")
-        self.window.geometry("1100x700")
+        self.window.title("Paragon • Front Desk")
+        self.window.geometry("1200x750")
         self.window.configure(bg="#0f172a")
-
-        # Handle close properly
-        self.window.protocol("WM_DELETE_WINDOW", self.logout)
 
         self.build_ui()
 
     # ---------------- UI ----------------
     def build_ui(self):
 
-        # Header
-        header = tk.Frame(self.window, bg="#020617", height=60)
-        header.pack(fill="x")
+        # Sidebar
+        sidebar = tk.Frame(self.window, bg="#020617", width=220)
+        sidebar.pack(side="left", fill="y")
 
-        tk.Label(header,
-                 text="🏢 Paragon Tenant Management",
-                 font=("Segoe UI", 16, "bold"),
-                 fg="white", bg="#020617").pack(side="left", padx=20)
+        tk.Label(sidebar, text="PARAGON",
+                 fg="white", bg="#020617",
+                 font=("Arial", 18, "bold")).pack(pady=20)
 
-        tk.Button(header,
-                  text="Logout",
-                  bg="#dc2626", fg="black",
+        self.nav_button(sidebar, "Tenant", self.show_tenant)
+        self.nav_button(sidebar, "Lease", self.show_lease)
+        self.nav_button(sidebar, "Payments", self.show_payments)
+        self.nav_button(sidebar, "Maintenance", self.show_maintenance)
+        self.nav_button(sidebar, "Complaints", self.show_complaints)
+
+        tk.Button(sidebar, text="Logout",
+                  bg="darkred", fg="white",
+                  command=self.logout).pack(side="bottom", pady=20)
+
+        # Content
+        self.content = tk.Frame(self.window, bg="#0f172a")
+        self.content.pack(side="right", fill="both", expand=True)
+
+        self.show_tenant()
+
+    def nav_button(self, parent, text, command):
+        tk.Button(parent, text=text,
+                  bg="#020617", fg="#cbd5f5",
                   relief="flat",
-                  command=self.logout).pack(side="right", padx=20, pady=10)
+                  command=command).pack(fill="x", pady=2)
 
-        # Main layout
-        main = tk.Frame(self.window, bg="#0f172a")
-        main.pack(fill="both", expand=True, padx=20, pady=20)
+    def clear_content(self):
+        for widget in self.content.winfo_children():
+            widget.destroy()
 
-        # LEFT PANEL (FORM)
-        left = tk.Frame(main, bg="#1e293b", bd=0)
-        left.pack(side="left", fill="y", padx=(0, 15))
+    # ---------------- TENANT ----------------
+    def show_tenant(self):
+        self.clear_content()
 
-        tk.Label(left, text="Tenant Details",
-                 font=("Segoe UI", 14, "bold"),
-                 fg="white", bg="#1e293b").pack(pady=10)
+        tk.Label(self.content, text="Tenant Management",
+                 fg="white", bg="#0f172a",
+                 font=("Arial", 20, "bold")).pack(pady=10)
 
-        self.ni = self.create_field(left, "NI Number")
-        self.first = self.create_field(left, "First Name")
-        self.last = self.create_field(left, "Last Name")
-        self.phone = self.create_field(left, "Phone")
-        self.email = self.create_field(left, "Email")
-        self.occupation = self.create_field(left, "Occupation")
-        self.reference = self.create_field(left, "Reference")
+        # SEARCH BAR
+        search_frame = tk.Frame(self.content, bg="#1e293b")
+        search_frame.pack(fill="x", padx=20, pady=10)
 
-        # Buttons
-        btn_frame = tk.Frame(left, bg="#1e293b")
-        btn_frame.pack(pady=15)
+        tk.Label(search_frame, text="Search",
+                 bg="#1e293b", fg="white").pack(side="left")
 
-        self.create_button(btn_frame, "Add", self.add_tenant, "#22c55e").grid(row=0, column=0, padx=5)
-        self.create_button(btn_frame, "Update", self.update_tenant, "#eab308").grid(row=0, column=1, padx=5)
-        self.create_button(btn_frame, "Search", self.search_tenant, "#3b82f6").grid(row=0, column=2, padx=5)
-        self.create_button(btn_frame, "Delete", self.delete_tenant, "#ef4444").grid(row=0, column=3, padx=5)
+        self.search_entry = tk.Entry(search_frame, bg="#020617", fg="white")
+        self.search_entry.pack(side="left", padx=10)
 
-        # RIGHT PANEL (OPERATIONS)
-        right = tk.Frame(main, bg="#1e293b")
-        right.pack(side="right", fill="both", expand=True)
+        tk.Label(search_frame, text="Occupation",
+                 bg="#1e293b", fg="white").pack(side="left")
 
-        tk.Label(right, text="Operations",
-                 font=("Segoe UI", 14, "bold"),
-                 fg="white", bg="#1e293b").pack(pady=10)
+        self.filter_occ = tk.Entry(search_frame, bg="#020617", fg="white")
+        self.filter_occ.pack(side="left", padx=10)
 
-        # Lease / Payment buttons
-        action_frame = tk.Frame(right, bg="#1e293b")
-        action_frame.pack(pady=10)
+        tk.Button(search_frame, text="Apply",
+                  bg="#3b82f6", fg="black",
+                  command=self.apply_filter).pack(side="left", padx=10)
 
-        self.create_button(action_frame, "View Lease", self.view_lease, "#6366f1").grid(row=0, column=0, padx=5)
-        self.create_button(action_frame, "Payments", self.view_payments, "#06b6d4").grid(row=0, column=1, padx=5)
-        self.create_button(action_frame, "Early Exit", self.request_early_leave, "#f97316").grid(row=0, column=2, padx=5)
+        tk.Button(search_frame, text="Reset",
+                  bg="#64748b", fg="black",
+                  command=self.load_all_tenants).pack(side="left", padx=5)
 
-        # Complaint section
-        complaint_box = tk.Frame(right, bg="#0f172a")
-        complaint_box.pack(fill="x", padx=20, pady=10)
+        # TABLE
+        table_frame = tk.Frame(self.content)
+        table_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        tk.Label(complaint_box, text="Complaint",
-                 fg="white", bg="#0f172a").pack(anchor="w")
+        columns = ("ID", "NI", "First", "Last", "Phone", "Email", "Occupation")
 
-        self.complaint_text = tk.Entry(complaint_box, bg="#1e293b", fg="white")
-        self.complaint_text.pack(fill="x", pady=5)
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings")
 
-        self.create_button(complaint_box, "Submit Complaint",
-                           self.add_complaint, "#ef4444").pack(pady=5)
+        for col in columns:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, anchor="center", width=120)
 
-        # Maintenance section
-        maintenance_box = tk.Frame(right, bg="#0f172a")
-        maintenance_box.pack(fill="x", padx=20, pady=10)
+        self.tree.pack(fill="both", expand=True)
 
-        tk.Label(maintenance_box, text="Maintenance Request",
-                 fg="white", bg="#0f172a").pack(anchor="w")
+        self.tree.bind("<<TreeviewSelect>>", self.fill_form)
 
-        self.apartment_id = tk.Entry(maintenance_box, bg="#1e293b", fg="white")
-        self.apartment_id.pack(fill="x", pady=5)
-        self.apartment_id.insert(0, "Apartment ID")
+        # FORM
+        form = tk.Frame(self.content, bg="#1e293b")
+        form.pack(fill="x", padx=20, pady=10)
 
-        self.issue = tk.Entry(maintenance_box, bg="#1e293b", fg="white")
-        self.issue.pack(fill="x", pady=5)
-        self.issue.insert(0, "Issue description")
+        self.ni = self.field(form, "NI")
+        self.first = self.field(form, "First")
+        self.last = self.field(form, "Last")
+        self.phone = self.field(form, "Phone")
+        self.email = self.field(form, "Email")
+        self.occupation = self.field(form, "Occupation")
+        self.reference = self.field(form, "Reference")
 
-        self.create_button(maintenance_box, "Submit Request",
-                           self.add_maintenance, "#22c55e").pack(pady=5)
+        btns = tk.Frame(form, bg="#1e293b")
+        btns.pack(pady=10)
 
-    # ---------------- UI HELPERS ----------------
-    def create_field(self, parent, label):
+        tk.Button(btns, text="Add", bg="#22c55e",
+                  command=self.add_tenant).grid(row=0, column=0, padx=5)
+
+        tk.Button(btns, text="Update", bg="#3b82f6",
+                  command=self.update_tenant).grid(row=0, column=1, padx=5)
+
+        tk.Button(btns, text="Delete", bg="#ef4444",
+                  command=self.delete_tenant).grid(row=0, column=2, padx=5)
+
+        self.load_all_tenants()
+
+    def field(self, parent, label):
         frame = tk.Frame(parent, bg="#1e293b")
         frame.pack(fill="x", padx=10, pady=5)
 
-        tk.Label(frame, text=label,
-                 fg="#cbd5f5", bg="#1e293b").pack(anchor="w")
+        tk.Label(frame, text=label, width=12,
+                 bg="#1e293b", fg="#cbd5f5").pack(side="left")
 
-        entry = tk.Entry(frame, bg="#0f172a", fg="white", insertbackground="white")
-        entry.pack(fill="x", pady=2)
+        entry = tk.Entry(frame, bg="#020617", fg="white", insertbackground="white")
+        entry.pack(side="left", fill="x", expand=True)
 
         return entry
 
-    def create_button(self, parent, text, command, color):
-        return tk.Button(parent,
-                         text=text,
-                         bg=color,
-                         fg="darkblue",
-                         relief="flat",
-                         width=12,
-                         height=2,
-                         command=command)
+    def load_all_tenants(self):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
 
-    # ---------------- FUNCTIONS ----------------
+        tenants = TenantController.GetAllTenants()
+
+        for t in tenants:
+            self.tree.insert("", "end", values=t)
+
+    def apply_filter(self):
+        keyword = self.search_entry.get()
+        occ = self.filter_occ.get()
+
+        results = TenantController.SearchTenants(keyword, occ)
+
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        for r in results:
+            self.tree.insert("", "end", values=r)
+
+    def fill_form(self, event):
+        selected = self.tree.focus()
+        data = self.tree.item(selected, "values")
+
+        if not data:
+            return
+
+        self.ni.delete(0, tk.END)
+        self.ni.insert(0, data[1])
+
+        self.first.delete(0, tk.END)
+        self.first.insert(0, data[2])
+
+        self.last.delete(0, tk.END)
+        self.last.insert(0, data[3])
+
+        self.phone.delete(0, tk.END)
+        self.phone.insert(0, data[4])
+
+        self.email.delete(0, tk.END)
+        self.email.insert(0, data[5])
+
+        self.occupation.delete(0, tk.END)
+        self.occupation.insert(0, data[6])
 
     def add_tenant(self):
         try:
             TenantController.AddTenant(
-                self.ni.get(),
-                self.first.get(),
-                self.last.get(),
-                self.phone.get(),
-                self.email.get(),
-                self.occupation.get(),
-                self.reference.get()
+                self.ni.get(), self.first.get(), self.last.get(),
+                self.phone.get(), self.email.get(),
+                self.occupation.get(), self.reference.get()
             )
-            messagebox.showinfo("Success", "Tenant added")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
-    def search_tenant(self):
-        try:
-            t = TenantController.GetTenant(self.ni.get())
-
-            if t:
-                self.first.delete(0, tk.END)
-                self.first.insert(0, t["first_name"])
-
-                self.last.delete(0, tk.END)
-                self.last.insert(0, t["last_name"])
-
-                self.phone.delete(0, tk.END)
-                self.phone.insert(0, t["phone"])
-
-                self.email.delete(0, tk.END)
-                self.email.insert(0, t["email"])
-
-                self.occupation.delete(0, tk.END)
-                self.occupation.insert(0, t["occupation"] or "")
-
-                self.reference.delete(0, tk.END)
-                self.reference.insert(0, t["tenant_references"] or "")
-
-                messagebox.showinfo("Loaded", "Tenant found")
-            else:
-                messagebox.showwarning("Not Found", "No tenant found")
-
+            self.load_all_tenants()
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
     def update_tenant(self):
         try:
             TenantController.UpdateTenant(
-                self.ni.get(),
-                self.first.get(),
-                self.last.get(),
-                self.phone.get(),
-                self.email.get(),
-                self.occupation.get(),
-                self.reference.get()
+                self.ni.get(), self.first.get(), self.last.get(),
+                self.phone.get(), self.email.get(),
+                self.occupation.get(), self.reference.get()
             )
-            messagebox.showinfo("Success", "Updated")
+            self.load_all_tenants()
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
     def delete_tenant(self):
         try:
-            TenantController.DeleteTenant(self.ni.get())
-            messagebox.showinfo("Success", "Deleted")
+            if messagebox.askyesno("Confirm", "Delete tenant?"):
+                TenantController.DeleteTenant(self.ni.get())
+                self.load_all_tenants()
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
-    def view_lease(self):
-        lease = TenantController.GetLease(self.ni.get())
-        if lease:
-            messagebox.showinfo("Lease",
-                                f"Apt: {lease['apartment_id']}\n"
-                                f"Rent: £{lease['rent']}\n"
-                                f"Status: {lease['status']}")
-        else:
-            messagebox.showwarning("Not Found", "No lease")
+    # ---------------- OTHER SECTIONS ----------------
+    def show_lease(self):
+        self.clear_content()
+        tk.Label(self.content, text="Lease Section",
+                 fg="black", bg="#0f172a").pack()
 
-    def view_payments(self):
-        payments = TenantController.GetPayments(self.ni.get())
-        if payments:
-            text = "\n".join([f"£{p['amount']} - {p['date']}" for p in payments])
-            messagebox.showinfo("Payments", text)
-        else:
-            messagebox.showwarning("Empty", "No payments")
+    def show_payments(self):
+        self.clear_content()
+        tk.Label(self.content, text="Payments Section",
+                 fg="black", bg="#0f172a").pack()
 
-    def request_early_leave(self):
-        try:
-            penalty = TenantController.TerminateLease(self.ni.get())
-            messagebox.showinfo("Exit", f"Penalty: £{penalty:.2f}")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+    def show_maintenance(self):
+        self.clear_content()
+        tk.Label(self.content, text="Maintenance Section",
+                 fg="black", bg="#0f172a").pack()
 
-    def add_complaint(self):
-        try:
-            TenantController.AddComplaint(
-                self.ni.get(),
-                self.complaint_text.get()
-            )
-            messagebox.showinfo("Success", "Complaint added")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+    def show_complaints(self):
+        self.clear_content()
+        tk.Label(self.content, text="Complaints Section",
+                 fg="black", bg="#0f172a").pack()
 
-    def add_maintenance(self):
-        try:
-            TenantController.AddMaintenance(
-                self.ni.get(),
-                self.apartment_id.get(),
-                self.issue.get()
-            )
-            messagebox.showinfo("Success", "Request added")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
+    # ---------------- LOGOUT ----------------
     def logout(self):
         self.window.destroy()
         self.parent.deiconify()
-        self.parent.lift()
-        self.parent.focus_force()
