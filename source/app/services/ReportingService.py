@@ -1,5 +1,5 @@
 import sqlite3
-from source.app.databases.Database import Get_Connection
+from source.app.databases.database import Get_Connection
 
 class ReportingService:
 
