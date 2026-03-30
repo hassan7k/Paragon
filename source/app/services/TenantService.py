@@ -3,12 +3,12 @@ from source.app.databases.database import Get_Connection
 from source.app.services.GlobalFunctions import (
     ValidateEmail, ValidateNI, ValidatePhone
 )
-from source.app.services.LeaseService import LeaseService
 from datetime import datetime, timedelta
+
 
 class TenantService:
 
-    # ---------------- ADD TENANT ----------------
+    # ---------------- ADD TENANT (ORIGINAL - KEPT) ----------------
     @staticmethod
     def AddTenant(ni, first, last, phone, email,
                   occupation, reference,
@@ -47,6 +47,55 @@ class TenantService:
         finally:
             conn.close()
 
+    # ---------------- ADD TENANT (EXTENDED - FOR REQUIREMENTS) ----------------
+    @staticmethod
+    def AddTenantExtended(ni, first, last, phone, email,
+                          occupation, reference,
+                          requirement, lease_years,
+                          emergency_contact="", notes=""):
+
+        ni = ValidateNI(ni)
+        phone = ValidatePhone(phone)
+        email = ValidateEmail(email)
+
+        if not first.strip() or not last.strip():
+            raise ValueError("Name required")
+
+        start_date = datetime.now().date()
+        end_date = start_date + timedelta(days=int(lease_years) * 365)
+
+        conn = Get_Connection()
+        cur = conn.cursor()
+
+        try:
+            cur.execute("""
+            INSERT INTO Tenant (
+                ni_number, first_name, last_name,
+                phone, email, occupation, tenant_references,
+                apartment_requirement, preferred_lease_years,
+                lease_start, lease_end,
+                emergency_contact, notes,
+                status, registration_date
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                ni, first, last, phone, email,
+                occupation, reference,
+                requirement, lease_years,
+                start_date, end_date,
+                emergency_contact, notes,
+                "Active", datetime.now().date()
+            ))
+
+            conn.commit()
+
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            raise ValueError("Tenant already exists")
+
+        finally:
+            conn.close()
+
     # ---------------- GET TENANT ----------------
     @staticmethod
     def GetTenant(ni):
@@ -73,7 +122,26 @@ class TenantService:
             "lease_years": row[9]
         }
 
-    # ---------------- SEARCH ----------------
+    # ---------------- GET ALL TENANTS ----------------
+    @staticmethod
+    def GetAllTenants():
+        conn = Get_Connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+        SELECT 
+            tenant_id, ni_number, first_name, last_name,
+            phone, email, occupation,
+            apartment_requirement,
+            preferred_lease_years
+        FROM Tenant
+        """)
+
+        data = cur.fetchall()
+        conn.close()
+        return data
+
+    # ---------------- SEARCH (LEGACY) ----------------
     @staticmethod
     def Search(keyword=""):
         conn = Get_Connection()
@@ -92,10 +160,38 @@ class TenantService:
         conn.close()
         return data
 
+    # ---------------- SEARCH TENANTS (WITH FILTER) ----------------
+    @staticmethod
+    def SearchTenants(keyword="", occupation=""):
+        conn = Get_Connection()
+        cur = conn.cursor()
+
+        keyword = f"%{keyword}%"
+        occupation = f"%{occupation}%"
+
+        cur.execute("""
+        SELECT 
+            tenant_id, ni_number, first_name, last_name,
+            phone, email, occupation,
+            apartment_requirement,
+            preferred_lease_years
+        FROM Tenant
+        WHERE (ni_number LIKE ? OR first_name LIKE ? OR last_name LIKE ?)
+        AND occupation LIKE ?
+        """, (keyword, keyword, keyword, occupation))
+
+        data = cur.fetchall()
+        conn.close()
+        return data
+
     # ---------------- UPDATE ----------------
     @staticmethod
     def UpdateTenant(ni, first, last, phone, email,
                      occupation, reference, requirement, lease_years):
+
+        ni = ValidateNI(ni)
+        phone = ValidatePhone(phone)
+        email = ValidateEmail(email)
 
         conn = Get_Connection()
         cur = conn.cursor()
@@ -112,6 +208,10 @@ class TenantService:
             requirement, lease_years, ni
         ))
 
+        if cur.rowcount == 0:
+            conn.close()
+            raise ValueError("Tenant not found")
+
         conn.commit()
         conn.close()
 
@@ -122,12 +222,21 @@ class TenantService:
         cur = conn.cursor()
 
         cur.execute("DELETE FROM Tenant WHERE ni_number=?", (ni,))
+
+        if cur.rowcount == 0:
+            conn.close()
+            raise ValueError("Tenant not found")
+
         conn.commit()
         conn.close()
 
     # ---------------- COMPLAINT ----------------
     @staticmethod
     def AddComplaint(ni, desc):
+
+        if not desc.strip():
+            raise ValueError("Description required")
+
         conn = Get_Connection()
         cur = conn.cursor()
 
@@ -138,8 +247,8 @@ class TenantService:
             raise ValueError("Tenant not found")
 
         cur.execute("""
-        INSERT INTO Complaint (tenant_id, description)
-        VALUES (?, ?)
+        INSERT INTO Complaint (tenant_id, description, status)
+        VALUES (?, ?, 'Open')
         """, (t[0], desc))
 
         conn.commit()
@@ -163,6 +272,10 @@ class TenantService:
     # ---------------- MAINTENANCE ----------------
     @staticmethod
     def AddMaintenance(ni, apartment_id, desc):
+
+        if not desc.strip():
+            raise ValueError("Description required")
+
         conn = Get_Connection()
         cur = conn.cursor()
 
@@ -194,3 +307,5 @@ class TenantService:
         data = cur.fetchall()
         conn.close()
         return data
+    
+    

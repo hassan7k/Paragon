@@ -20,17 +20,17 @@ class TenantController:
     def DeleteTenant(ni):
         return TenantService.DeleteTenant(ni)
 
-    # ---------------- NEW: GET ALL ----------------
+    # ---------------- GET ALL ----------------
     @staticmethod
     def GetAllTenants():
         return TenantService.GetAllTenants()
 
-    # ---------------- NEW: SEARCH + FILTER ----------------
+    # ---------------- SEARCH + FILTER ----------------
     @staticmethod
     def SearchTenants(keyword, occupation):
         return TenantService.SearchTenants(keyword, occupation)
 
-    # ---------------- LEGACY SEARCH (KEEP SAFE) ----------------
+    # ---------------- LEGACY ----------------
     @staticmethod
     def Search(keyword):
         return TenantService.Search(keyword)
@@ -52,52 +52,3 @@ class TenantController:
     @staticmethod
     def GetMaintenance():
         return TenantService.GetMaintenance()
-    # ---------------- GET ALL ----------------
-    @staticmethod
-    def GetAllTenants():
-        from source.app.databases.database import Get_Connection
-
-        conn = Get_Connection()
-        cur = conn.cursor()
-
-        cur.execute("""
-        SELECT 
-            tenant_id, ni_number, first_name, last_name,
-            phone, email, occupation,
-            apartment_requirement,
-            preferred_lease_years
-        FROM Tenant
-        """)
-
-        data = cur.fetchall()
-        conn.close()
-
-        return data
-
-
-    # ---------------- SEARCH TENANTS ----------------
-    @staticmethod
-    def SearchTenants(keyword, occupation):
-        from source.app.databases.database import Get_Connection
-
-        conn = Get_Connection()
-        cur = conn.cursor()
-
-        keyword = f"%{keyword}%"
-        occupation = f"%{occupation}%"
-
-        cur.execute("""
-        SELECT 
-            tenant_id, ni_number, first_name, last_name,
-            phone, email, occupation,
-            apartment_requirement,
-            preferred_lease_years
-        FROM Tenant
-        WHERE (ni_number LIKE ? OR first_name LIKE ? OR last_name LIKE ?)
-        AND occupation LIKE ?
-        """, (keyword, keyword, keyword, occupation))
-
-        data = cur.fetchall()
-        conn.close()
-
-        return data

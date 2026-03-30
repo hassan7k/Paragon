@@ -2,7 +2,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from source.app.controllers.Lease import LeaseController
 from source.app.controllers.Tenants import TenantController
-
+from source.app.ui.PaymentUI import PaymentUI
+from source.app.ui.MaintenanceUI import MaintenanceUI
 
 class TenantUI:
 
@@ -69,7 +70,7 @@ class TenantUI:
         tk.Label(search_frame, text="Search", bg="#1e293b", fg="white").pack(side="left")
 
         self.search_var = tk.StringVar()
-        self.search_var.trace("w", self.live_search)
+        self.search_var.trace_add("write", self.live_search)  # FIXED
 
         self.search_entry = tk.Entry(search_frame,
                                     textvariable=self.search_var,
@@ -93,7 +94,8 @@ class TenantUI:
         table_frame = tk.Frame(self.content)
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        columns = ("ID", "NI", "First", "Last", "Phone", "Email", "Occupation", "Requirement", "Lease Years")
+        columns = ("ID", "NI", "First", "Last", "Phone", "Email",
+                   "Occupation", "Requirement", "Lease Years")
 
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings")
 
@@ -101,7 +103,12 @@ class TenantUI:
             self.tree.heading(col, text=col)
             self.tree.column(col, anchor="center", width=120)
 
-        self.tree.pack(fill="both", expand=True)
+        self.tree.pack(side="left", fill="both", expand=True)
+
+        # Scrollbar (ADDED)
+        scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
 
         self.tree.bind("<<TreeviewSelect>>", self.fill_form)
 
@@ -118,6 +125,10 @@ class TenantUI:
         self.reference = self.field(form, "Reference")
         self.requirement = self.field(form, "Apartment Requirement")
         self.lease_years = self.field(form, "Lease Years")
+
+        # NEW FIELDS (ADDED ONLY)
+        self.emergency = self.field(form, "Emergency Contact")
+        self.notes = self.field(form, "Notes")
 
         # BUTTONS
         btns = tk.Frame(form, bg="#1e293b")
@@ -180,6 +191,10 @@ class TenantUI:
     # ---------------- AUTO FILL ----------------
     def fill_form(self, event):
         selected = self.tree.focus()
+
+        if not selected:
+            return
+
         data = self.tree.item(selected, "values")
 
         if not data:
@@ -194,7 +209,6 @@ class TenantUI:
             field.delete(0, tk.END)
             field.insert(0, data[i])
 
-        # FIXED PART
         self.requirement.delete(0, tk.END)
         self.requirement.insert(0, data[7] if len(data) > 7 else "")
 
@@ -204,7 +218,7 @@ class TenantUI:
     # ---------------- ACTIONS ----------------
     def add_tenant(self):
         try:
-            TenantController.AddTenant(
+            TenantController.AddTenantExtended(
                 self.ni.get(),
                 self.first.get(),
                 self.last.get(),
@@ -213,9 +227,15 @@ class TenantUI:
                 self.occupation.get(),
                 self.reference.get(),
                 self.requirement.get(),
-                self.lease_years.get()
+                self.lease_years.get(),
+                self.emergency.get(),
+                self.notes.get()
             )
+
             self.load_all_tenants()
+            self.clear_form()
+            messagebox.showinfo("Success", "Tenant added successfully")
+
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -232,7 +252,11 @@ class TenantUI:
                 self.requirement.get(),
                 self.lease_years.get()
             )
+
             self.load_all_tenants()
+            self.clear_form()
+            messagebox.showinfo("Success", "Tenant updated")
+
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -241,8 +265,20 @@ class TenantUI:
             if messagebox.askyesno("Confirm", "Delete tenant?"):
                 TenantController.DeleteTenant(self.ni.get())
                 self.load_all_tenants()
+                self.clear_form()
+                messagebox.showinfo("Success", "Tenant deleted")
+
         except Exception as e:
             messagebox.showerror("Error", str(e))
+
+    def clear_form(self):
+        for field in [
+            self.ni, self.first, self.last, self.phone,
+            self.email, self.occupation, self.reference,
+            self.requirement, self.lease_years,
+            self.emergency, self.notes
+        ]:
+            field.delete(0, tk.END)
 
     # ---------------- OTHER ----------------
     def show_lease(self):
@@ -272,15 +308,40 @@ class TenantUI:
 
     def show_payments(self):
         self.clear_content()
-        tk.Label(self.content, text="Payments Section", fg="white", bg="#0f172a").pack()
+
+        tk.Label(self.content, text="Payments",
+             fg="white", bg="#0f172a",
+             font=("Arial", 20, "bold")).pack(pady=10)
+
+        tk.Button(self.content, text="Open Payment System",
+              bg="#22c55e", fg="black",
+              command=lambda: PaymentUI(self.window)).pack(pady=20)
 
     def show_maintenance(self):
         self.clear_content()
-        tk.Label(self.content, text="Maintenance Section", fg="white", bg="#0f172a").pack()
+
+        tk.Label(self.content, text="Maintenance",
+                fg="white", bg="#0f172a",
+                font=("Arial", 20, "bold")).pack(pady=10)
+
+        tk.Button(self.content, text="Open Maintenance Dashboard",
+                bg="#22c55e", fg="black",
+                command=lambda: MaintenanceUI(self.window)).pack(pady=20)
 
     def show_complaints(self):
         self.clear_content()
-        tk.Label(self.content, text="Complaints Section", fg="white", bg="#0f172a").pack()
+
+        tk.Label(self.content, text="Complaints",
+                fg="white", bg="#0f172a",
+                font=("Arial", 20, "bold")).pack(pady=10)
+
+        from source.app.ui.ComplaintUI import ComplaintUI
+
+        tk.Button(self.content,
+                text="Open Complaint System",
+                bg="#22c55e", fg="black",
+                command=lambda: ComplaintUI(self.window)
+                ).pack(pady=20)
 
     def logout(self):
         self.window.destroy()
