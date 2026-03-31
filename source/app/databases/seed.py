@@ -86,7 +86,10 @@ def Seed_Test_Data():
         AuthService.CreateUser("admin1", "pass123", "ADMIN", 1)
     except ValueError:
         pass
-
+    try:
+        AuthService.CreateUser("front1", "pass123", "FRONT_DESK", 1)
+    except ValueError:
+        pass
     print("Test data inserted successfully.")
     print("Maintenance login: maint1 / pass123")
     print("Admin login: admin1 / pass123")
