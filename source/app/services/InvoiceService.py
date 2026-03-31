@@ -1,8 +1,7 @@
 import sqlite3
 from datetime import date
-from source.app.databases.Database import Get_Connection
+from source.app.databases.database import Get_Connection
 
-# 
 
 class InvoiceService:
 
@@ -18,7 +17,7 @@ class InvoiceService:
             raise ValueError("Due date is required.")
         if AmountDue <= 0:
             raise ValueError("Amount due must be more than 0.")
-        
+
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()
@@ -38,14 +37,14 @@ class InvoiceService:
             if "FOREIGN KEY constraint failed" in Message:
                 raise ValueError("Lease doesn't exist.") from FailError
             raise ValueError("Database integrity error while creating invoice.") from FailError
-        
+
         except Exception:
             Connection.rollback()
             raise
 
         finally:
             Connection.close()
-  
+
     @staticmethod
     def GetInvoiceById(InvoiceId: int):
         if InvoiceId <= 0:
@@ -63,7 +62,7 @@ class InvoiceService:
 
         finally:
             Connection.close()
-    
+
     @staticmethod
     def GetInvoiceByLease(LeaseId: int):
         if LeaseId <= 0:
@@ -135,7 +134,7 @@ class InvoiceService:
 
         finally:
             Connection.close()
-    
+
     @staticmethod
     def GetOverdueInvoices():
         Connection = Get_Connection()

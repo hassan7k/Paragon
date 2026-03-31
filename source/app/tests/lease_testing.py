@@ -1,5 +1,5 @@
 import os
-from source.app.databases.Database import DatabasePath, Create_Tables, Get_Connection
+from source.app.databases.database import DatabasePath, Create_Tables, Get_Connection
 from source.app.services.TenantService import TenantService
 from source.app.services.LeaseService import LeaseService
 
@@ -10,19 +10,16 @@ def ResetDatabase():
 def CreateTempSeed():
     Connection = Get_Connection()
     Cursor = Connection.cursor()
-
     Cursor.execute("INSERT INTO Location (city) VALUES (?)", ("Bristol",))
     Cursor.execute("SELECT location_id FROM Location WHERE city = ?", ("Bristol",))
     LocationId = Cursor.fetchone()[0]
-
     Cursor.execute("""
         INSERT INTO Apartment (location_id, apartment_number, type, rooms, monthly_rent, status)
         VALUES (?, ?, ?, ?, ?, 'AVAILABLE')
     """, (LocationId, "A101", "FLAT", 2, 1200.0))
-
-    Cursor.execute("SELECT apartment_id FROM Apartment WHERE location_id = ? AND apartment_number = ?", (LocationId, "A101"))
+    Cursor.execute("SELECT apartment_id FROM Apartment WHERE location_id = ? AND apartment_number = ?",
+                   (LocationId, "A101"))
     ApartmentId = Cursor.fetchone()[0]
-
     Connection.commit()
     Connection.close()
     return ApartmentId
@@ -45,78 +42,66 @@ def GetApartmentStatus(ApartmentId: int) -> str:
     return Status
 
 def Execute():
-    print("Lease service testing...")
+    print("Running LeaseService testing...")
 
     ResetDatabase()
     Create_Tables()
-
     ApartmentId = CreateTempSeed()
 
     TenantId = TenantService.AddTenant(
-        "CB987654A",
-        "Jimmy",
-        "Smith",
-        "07123456789",
-        "jimmy.smith@example.co.uk",
-        "Student",
-        "Ref: Jane Smith"
+        "CB987654A", "Jimmy", "Smith", "07123456789",
+        "jimmy.smith@example.co.uk", "Student", "Ref: Jane Smith"
     )
 
-    print("Client added. Details are :: ")
+    print("Client added. Details are:")
     print(f"TenantId={TenantId}, ApartmentId={ApartmentId}")
     print()
 
+    # Test 1: Valid lease creation (end date in the past so standard termination can be tested)
     try:
-        LeaseId = LeaseService.CreateLease(
-            TenantId,
-            ApartmentId,
-            "2026-02-01",
-            "2027-02-01",
-            1000.0,
-            1200.0,
-            "2026-03-01"
+        LeaseId = LeaseService.CreateLeaseWithInitialInvoice(
+            TenantId, ApartmentId,
+            "2024-01-01", "2025-01-01",
+            1000.0, 1200.0, "2024-02-01"
         )
-
         LeaseCount = CountRows("Lease", "WHERE lease_id = ?", (LeaseId,))
         InvoiceCount = CountRows("Invoice", "WHERE lease_id = ?", (LeaseId,))
         AptStatus = GetApartmentStatus(ApartmentId)
 
         if LeaseCount == 1 and InvoiceCount == 1 and AptStatus == "OCCUPIED":
-            print(f"Lease created (lease_id={LeaseId}), invoice created, apartment occupied.")
+            print(f"Pass. Lease created (lease_id={LeaseId}), invoice created, apartment occupied.")
         else:
-            print("Success path did not create expected rows/status.")
-            print("LeaseCount:", LeaseCount, "InvoiceCount:", InvoiceCount, "AptStatus:", AptStatus)
-
+            print("Fail. Expected rows/status not met.")
     except Exception as FailError:
-        print("Success path raised error:", FailError)
+        print(f"Fail. Success path raised error: {FailError}")
 
-
+    # Test 2: Invalid tenant ID (foreign key failure)
     try:
-        CorruptedTenantId = 555555
-        LeaseId = LeaseService.CreateLease(
-            CorruptedTenantId,
-            ApartmentId,
-            "2026-02-01",
-            "2027-02-01",
-            1000.0,
-            1200.0,
-            "2026-03-01"
+        LeaseService.CreateLeaseWithInitialInvoice(
+            555555, ApartmentId,
+            "2024-01-01", "2025-01-01",
+            1000.0, 1200.0, "2024-02-01"
         )
-
-        print("Test should have failed.")
-
+        print("Fail. Should have failed with invalid tenant.")
     except Exception as FailError:
         TotalLeases = CountRows("Lease")
         TotalInvoices = CountRows("Invoice")
-        AptStatus = GetApartmentStatus(ApartmentId)
-
         if TotalLeases == 1 and TotalInvoices == 1:
-            print("Pass, no partial lease/invoice created.")
+            print("Pass. No partial lease/invoice created.")
         else:
-            print("TotalLeases:", TotalLeases, "TotalInvoices:", TotalInvoices)
+            print(f"Fail. TotalLeases: {TotalLeases}, TotalInvoices: {TotalInvoices}")
+        print(f"Expected failure: {FailError}")
 
-        print("Expected failure:", FailError)
-        print("Apartment status now:", AptStatus)
+    # Test 3: Lease termination
+    try:
+        LeaseService.TerminateLease(LeaseId)
+        AptStatus = GetApartmentStatus(ApartmentId)
+        if AptStatus == "AVAILABLE":
+            print("Pass. Lease terminated, apartment back to AVAILABLE.")
+        else:
+            print(f"Fail. Apartment status is {AptStatus}, expected AVAILABLE.")
+    except Exception as FailError:
+        print(f"Fail. Termination raised error: {FailError}")
 
 if __name__ == "__main__":
     Execute()

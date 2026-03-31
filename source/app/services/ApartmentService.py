@@ -1,10 +1,10 @@
 import sqlite3
 from datetime import date
-from source.app.databases.Database import Get_Connection
+from source.app.databases.database import Get_Connection
 
 class ApartmentService:
     @staticmethod
-    
+
     def CreateApartment(
         LocationId: int,
         ApartmentNumber: str,
@@ -13,7 +13,7 @@ class ApartmentService:
         MonthlyRent: float,
         Status: str = "AVAILABLE"
     ) -> int:
-    
+
         if LocationId <= 0:
             raise ValueError("Invalid location ID.")
         if not ApartmentNumber or not ApartmentNumber.strip():
@@ -24,11 +24,11 @@ class ApartmentService:
             raise ValueError("Rooms must be greater than 0.")
         if MonthlyRent <= 0:
             raise ValueError("Monthly rent must be greater than 0.")
-        
+
         ValidStatuses = ("AVAILABLE", "OCCUPIED", "MAINTENANCE")
         if Status not in ValidStatuses:
             raise ValueError("Invalid apartment status.")
-        
+
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()
@@ -48,7 +48,7 @@ class ApartmentService:
 
             if "UNIQUE constraint failed" in Message:
                 raise ValueError("Apartment already exists in this location.") from FailError
-            
+
             if "FOREIGN KEY constraint failed" in Message:
                 raise ValueError("Location does not exist.") from FailError
 
@@ -61,7 +61,7 @@ class ApartmentService:
         finally:
             Connection.close()
 
-    
+
     @staticmethod
     def GetApartmentById(ApartmentId: int):
         if ApartmentId <= 0:
@@ -107,11 +107,11 @@ class ApartmentService:
         ValidStatuses = ("AVAILABLE", "OCCUPIED", "MAINTENANCE")
         if NewStatus not in ValidStatuses:
             raise ValueError("Invalid apartment status.")
-        
+
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()
-            
+
             Cursor.execute("""
                 UPDATE Apartment
                 SET status = ?
@@ -120,7 +120,7 @@ class ApartmentService:
 
             if Cursor.rowcount == 0:
                 raise ValueError("Apartment not found.")
-            
+
             Connection.commit()
 
         except:

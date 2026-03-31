@@ -1,0 +1,7 @@
+# No external dependencies required.
+# All libraries used are part of the Python 3.10+ standard library:
+#   - tkinter  (GUI)
+#   - sqlite3  (database)
+#   - hashlib  (password hashing)
+#   - secrets  (salt generation)
+#   - re       (validation)

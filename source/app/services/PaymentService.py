@@ -1,5 +1,5 @@
 import sqlite3
-from source.app.databases.Database import Get_Connection
+from source.app.databases.database import Get_Connection
 
 class PaymentService:
 
@@ -11,7 +11,7 @@ class PaymentService:
             raise ValueError("Payment amount must be above 0.")
         if not Method or not Method.strip():
             raise ValueError("Payment method is required.")
-        
+
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()
@@ -24,7 +24,7 @@ class PaymentService:
 
             if not InvoiceData:
                 raise ValueError("Invoice data not found.")
-            
+
             AmountDue, InvoiceStatus = InvoiceData
 
             if InvoiceStatus == "PAID":
@@ -32,7 +32,7 @@ class PaymentService:
 
             if Amount != AmountDue:
                 raise ValueError("Payment amount must match the invoice amount exactly.")
-            
+
             Cursor.execute("""
                 INSERT INTO Payment (invoice_id, amount, payment_date, method)
                 VALUES (?, ?, DATE('now'), ?)
@@ -52,7 +52,7 @@ class PaymentService:
 
             Connection.commit()
             return PaymentId
-       
+
         except sqlite3.IntegrityError as FailError:
             Connection.rollback()
             Message = str(FailError)

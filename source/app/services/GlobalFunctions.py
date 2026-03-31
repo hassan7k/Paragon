@@ -2,7 +2,7 @@ import re
 import hashlib
 import secrets
 
-NI_REGEX = re.compile(r"^[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]$") # basically just lets me reuse this so i dont have to re-parse a pattern all the time, needs 6 numbers, ends with a letter A-D, can't start with a certain 2 letters
+NI_REGEX = re.compile(r"^[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]$")
 
 def Normalise_NI(NI: str) -> str:
     if NI is None:
@@ -17,7 +17,7 @@ def ValidateNI(NI: str) -> str:
         raise ValueError("NI number must be 9 characters, e.g AB123456C")
     if not NI_REGEX.match(NI):
         raise ValueError("Invalid NI format. Expected as in format of AB123456C")
-    
+
     return NI
 
 def ValidatePhone(Number: str) -> str:
@@ -33,17 +33,17 @@ def ValidatePhone(Number: str) -> str:
         raise ValueError("Phone number must start with 0.")
     if len(Number) != 11:
         raise ValueError("Phone number must have 11 (eleven) digits in local UK format.")
-    
+
     return Number
 
 def ValidateEmail(Email: str) -> str:
     if Email is None:
         raise ValueError("Email cannot be left blank.")
     Email = Email.strip()
-    
+
     if "@" not in Email or Email.startswith("@") or Email.endswith("@"):
         raise ValueError("Invalid email.")
-   
+
     return Email
 
 class PasswordFunctions:
@@ -52,22 +52,21 @@ class PasswordFunctions:
     def HashPassword(Password: str):
         if not Password or not Password.strip():
             raise ValueError("Password is required.")
-        
+
         Salt = secrets.token_hex(16)
         HashedPassword = hashlib.sha256((Salt + Password).encode()).hexdigest()
 
         return f"{Salt}${HashedPassword}"
-    
+
     @staticmethod
     def VerifyPassword(PlainPassword: str, StoredPassword: str) -> bool:
         if not PlainPassword or not StoredPassword:
             return False
-     
+
         try:
             Salt, StoredHash = StoredPassword.split("$")
         except ValueError:
             return False
-    
+
         CalculatedHash = hashlib.sha256((Salt + PlainPassword).encode()).hexdigest()
         return CalculatedHash == StoredHash
-

@@ -1,6 +1,6 @@
 import sqlite3
 from source.app.services.GlobalFunctions import PasswordFunctions
-from source.app.databases.Database import Get_Connection
+from source.app.databases.database import Get_Connection
 
 class AuthService:
 
@@ -15,9 +15,9 @@ class AuthService:
             raise ValueError("Role is invalid.")
         if LocationId <= 0:
             raise ValueError("Location Id is invalid.")
-        
+
         PasswordHash = PasswordFunctions.HashPassword(Password)
-        
+
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()
@@ -70,7 +70,7 @@ class AuthService:
             "location_id": LocationId
         }
 
-    
+
     @staticmethod
     def GetUserByUsername(Username: str):
         if not Username or not Username.strip():
@@ -82,14 +82,14 @@ class AuthService:
             Cursor.execute("""
                 SELECT user_id, username, password_hash, role, location_id
                 FROM Users
-                WHERE username = ?
+                WHERE username = ? AND is_active = 1
             """, (Username.strip(),))
             return Cursor.fetchone()
 
         finally:
             Connection.close()
 
-    
+
     @staticmethod
     def CheckPermission(Role: str, RequiredRoles: tuple) -> bool:
         if not Role or not RequiredRoles:

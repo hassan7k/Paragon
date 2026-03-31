@@ -1,5 +1,5 @@
 import sqlite3
-from source.app.databases.Database import Get_Connection
+from source.app.databases.database import Get_Connection
 
 class MaintenanceService:
 
@@ -11,11 +11,11 @@ class MaintenanceService:
             raise ValueError("Apartment Id is invalid.")
         if not Description or not Description.strip():
             raise ValueError("No valid descripton given.")
-        
+
         ValidPriorities = ("LOW", "MEDIUM", "HIGH")
         if Priority not in ValidPriorities:
             raise ValueError("Invalid priority.")
-        
+
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()
@@ -49,7 +49,7 @@ class MaintenanceService:
     def UpdateMaintenanceStatus(RequestId: int, NewStatus: str):
         if RequestId <= 0:
             raise ValueError("Request Id is invalid")
-        
+
         ValidStatuses = ("REPORTED", "IN_PROGRESS", "RESOLVED")
         if NewStatus not in ValidStatuses:
             raise ValueError("Invalid maintenance status.")
@@ -72,7 +72,7 @@ class MaintenanceService:
 
         finally:
             Connection.close()
-    
+
     @staticmethod
     def ResolveMaintenanceRequest(RequestId: int, Cost: float):
         if RequestId <= 0:
@@ -102,10 +102,10 @@ class MaintenanceService:
             Connection.close()
 
     @staticmethod
-    def GetRequestById(RequestId : int):
+    def GetRequestById(RequestId: int):
         if RequestId <= 0:
             raise ValueError("Request Id is invalid.")
-        
+
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()
@@ -117,10 +117,10 @@ class MaintenanceService:
                 """
             , (RequestId,))
             return Cursor.fetchone()
-        
+
         finally:
             Connection.close()
-    
+
     @staticmethod
     def GetRequestsByTenant(TenantId: int):
         if TenantId <= 0:
@@ -140,12 +140,12 @@ class MaintenanceService:
 
         finally:
             Connection.close()
-        
+
     @staticmethod
     def GetRequestsByApartment(ApartmentId: int):
         if ApartmentId <= 0:
             raise ValueError("Apartment Id is invalid.")
-        
+
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()

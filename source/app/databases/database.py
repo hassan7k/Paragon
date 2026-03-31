@@ -1,11 +1,9 @@
 import os
-import sqlite3 # Imported database library
+import sqlite3
 
-# This is the absolute + full path to this file
 CurrentDir = os.path.dirname(os.path.abspath(__file__))
 DatabasePath = os.path.join(CurrentDir, "paragondata.db")
 
-# A function that connects to the database
 def Get_Connection():
     Connection = sqlite3.connect(DatabasePath)
     Connection.execute("PRAGMA foreign_keys = ON;")
@@ -23,20 +21,21 @@ def Create_Tables():
     );
     """)
 
-    # User table
+    # Users table — is_active enables soft-delete for staff accounts
     Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Users (
         user_id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN 
+        role TEXT NOT NULL CHECK(role IN
             ('FRONT_DESK','FINANCE','MAINTENANCE','ADMIN','MANAGER')),
         location_id INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (location_id) REFERENCES Location(location_id)
     );
     """)
 
-    # Tenant table
+    # Tenant table — is_active enables soft-delete without losing history
     Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Tenant (
         tenant_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,11 +46,12 @@ def Create_Tables():
         email TEXT NOT NULL,
         occupation TEXT,
         tenant_references TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        is_active INTEGER NOT NULL DEFAULT 1
     );
     """)
 
-    # Apartments table
+    # Apartment table
     Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Apartment (
         apartment_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,7 +109,7 @@ def Create_Tables():
     );
     """)
 
-    # Maintenance table
+    # MaintenanceRequest table
     Cursor.execute("""
     CREATE TABLE IF NOT EXISTS MaintenanceRequest (
         request_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,7 +127,7 @@ def Create_Tables():
     );
     """)
 
-    # Complaints table
+    # Complaint table
     Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Complaint (
         complaint_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,7 +140,7 @@ def Create_Tables():
     );
     """)
 
-    # Indexing 
+    # Indexes
     Cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_location ON Users(location_id);")
     Cursor.execute("CREATE INDEX IF NOT EXISTS idx_apartment_location ON Apartment(location_id);")
     Cursor.execute("CREATE INDEX IF NOT EXISTS idx_lease_tenant ON Lease(tenant_id);")
