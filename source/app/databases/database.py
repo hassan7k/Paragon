@@ -1,46 +1,42 @@
 import os
 import sqlite3
 
-# ---------------- PATH (LOCKED & SAFE) ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DatabasePath = os.path.join(BASE_DIR, "paragondata.db")
+CurrentDir = os.path.dirname(os.path.abspath(__file__))
+DatabasePath = os.path.join(CurrentDir, "paragondata.db")
 
-
-# ---------------- CONNECTION ----------------
 def Get_Connection():
-    conn = sqlite3.connect(DatabasePath)
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    Connection = sqlite3.connect(DatabasePath)
+    Connection.execute("PRAGMA foreign_keys = ON;")
+    return Connection
 
-
-# ---------------- CREATE TABLES ----------------
 def Create_Tables():
-    conn = Get_Connection()
-    cur = conn.cursor()
+    Connection = Get_Connection()
+    Cursor = Connection.cursor()
 
-    # ---------------- LOCATION ----------------
-    cur.execute("""
+    # Location table
+    Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Location (
         location_id INTEGER PRIMARY KEY AUTOINCREMENT,
         city TEXT NOT NULL UNIQUE
     );
     """)
 
-    # ---------------- USERS ----------------
-    cur.execute("""
+    # Users table — is_active enables soft-delete for staff accounts
+    Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Users (
         user_id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN 
+        role TEXT NOT NULL CHECK(role IN
             ('FRONT_DESK','FINANCE','MAINTENANCE','ADMIN','MANAGER')),
         location_id INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (location_id) REFERENCES Location(location_id)
     );
     """)
 
-    # ---------------- TENANT ----------------
-    cur.execute("""
+    # Tenant table — is_active enables soft-delete without losing history
+    Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Tenant (
         tenant_id INTEGER PRIMARY KEY AUTOINCREMENT,
         ni_number TEXT NOT NULL UNIQUE,
@@ -50,21 +46,20 @@ def Create_Tables():
         email TEXT NOT NULL,
         occupation TEXT,
         tenant_references TEXT,
-        apartment_requirement TEXT,
-        preferred_lease_years INTEGER,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        is_active INTEGER NOT NULL DEFAULT 1
     );
     """)
 
-    # ---------------- APARTMENT ----------------
-    cur.execute("""
+    # Apartment table
+    Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Apartment (
         apartment_id INTEGER PRIMARY KEY AUTOINCREMENT,
         location_id INTEGER NOT NULL,
         apartment_number TEXT NOT NULL,
         type TEXT NOT NULL,
-        rooms INTEGER NOT NULL,
-        monthly_rent REAL NOT NULL,
+        rooms INTEGER NOT NULL CHECK(rooms > 0),
+        monthly_rent REAL NOT NULL CHECK(monthly_rent > 0),
         status TEXT NOT NULL DEFAULT 'AVAILABLE'
             CHECK(status IN ('AVAILABLE','OCCUPIED','MAINTENANCE')),
         FOREIGN KEY (location_id) REFERENCES Location(location_id),
@@ -72,16 +67,16 @@ def Create_Tables():
     );
     """)
 
-    # ---------------- LEASE ----------------
-    cur.execute("""
+    # Lease table
+    Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Lease (
         lease_id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id INTEGER NOT NULL,
         apartment_id INTEGER NOT NULL,
         start_date TEXT NOT NULL,
         end_date TEXT NOT NULL,
-        deposit_amount REAL NOT NULL,
-        agreed_monthly_rent REAL NOT NULL,
+        deposit_amount REAL NOT NULL CHECK(deposit_amount >= 0),
+        agreed_monthly_rent REAL NOT NULL CHECK(agreed_monthly_rent > 0),
         status TEXT NOT NULL DEFAULT 'ACTIVE'
             CHECK(status IN ('ACTIVE','TERMINATED','PENDING')),
         FOREIGN KEY (tenant_id) REFERENCES Tenant(tenant_id),
@@ -89,33 +84,33 @@ def Create_Tables():
     );
     """)
 
-    # ---------------- INVOICE ----------------
-    cur.execute("""
+    # Invoice table
+    Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Invoice (
         invoice_id INTEGER PRIMARY KEY AUTOINCREMENT,
         lease_id INTEGER NOT NULL,
         due_date TEXT NOT NULL,
-        amount_due REAL NOT NULL,
+        amount_due REAL NOT NULL CHECK(amount_due > 0),
         status TEXT NOT NULL DEFAULT 'PENDING'
             CHECK(status IN ('PENDING','PAID','OVERDUE')),
         FOREIGN KEY (lease_id) REFERENCES Lease(lease_id)
     );
     """)
 
-    # ---------------- PAYMENT ----------------
-    cur.execute("""
+    # Payment table
+    Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Payment (
         payment_id INTEGER PRIMARY KEY AUTOINCREMENT,
         invoice_id INTEGER NOT NULL,
-        amount REAL NOT NULL,
+        amount REAL NOT NULL CHECK(amount > 0),
         payment_date TEXT NOT NULL,
         method TEXT,
         FOREIGN KEY (invoice_id) REFERENCES Invoice(invoice_id)
     );
     """)
 
-    # ---------------- MAINTENANCE ----------------
-    cur.execute("""
+    # MaintenanceRequest table
+    Cursor.execute("""
     CREATE TABLE IF NOT EXISTS MaintenanceRequest (
         request_id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id INTEGER NOT NULL,
@@ -123,22 +118,17 @@ def Create_Tables():
         description TEXT NOT NULL,
         priority TEXT NOT NULL CHECK(priority IN ('LOW','MEDIUM','HIGH')),
         status TEXT NOT NULL DEFAULT 'REPORTED'
-            CHECK(status IN ('REPORTED','SCHEDULED','IN_PROGRESS','RESOLVED')),
-        assigned_worker TEXT,
-        scheduled_date TEXT,
-        scheduled_time TEXT,
-        resolution_notes TEXT,
-        time_taken_hours REAL,
+            CHECK(status IN ('REPORTED','IN_PROGRESS','RESOLVED')),
         reported_date TEXT DEFAULT CURRENT_TIMESTAMP,
         resolved_date TEXT,
-        cost REAL,
+        cost REAL CHECK(cost >= 0),
         FOREIGN KEY (tenant_id) REFERENCES Tenant(tenant_id),
         FOREIGN KEY (apartment_id) REFERENCES Apartment(apartment_id)
     );
     """)
 
-    # ---------------- COMPLAINT ----------------
-    cur.execute("""
+    # Complaint table
+    Cursor.execute("""
     CREATE TABLE IF NOT EXISTS Complaint (
         complaint_id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id INTEGER NOT NULL,
@@ -150,11 +140,14 @@ def Create_Tables():
     );
     """)
 
-    # ---------------- INDEXES (PERFORMANCE) ----------------
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_lease_tenant ON Lease(tenant_id);")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_invoice_lease ON Invoice(lease_id);")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_payment_invoice ON Payment(invoice_id);")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_maintenance_tenant ON MaintenanceRequest(tenant_id);")
+    # Indexes
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_location ON Users(location_id);")
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_apartment_location ON Apartment(location_id);")
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_lease_tenant ON Lease(tenant_id);")
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_lease_apartment ON Lease(apartment_id);")
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_invoice_lease ON Invoice(lease_id);")
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_payment_invoice ON Payment(invoice_id);")
+    Cursor.execute("CREATE INDEX IF NOT EXISTS idx_maintenance_apartment ON MaintenanceRequest(apartment_id);")
 
-    conn.commit()
-    conn.close()
+    Connection.commit()
+    Connection.close()
