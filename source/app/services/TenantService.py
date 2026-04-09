@@ -1,5 +1,5 @@
 import sqlite3
-from source.app.databases.Database import Get_Connection
+from source.app.databases.database import Get_Connection
 from source.app.services.GlobalFunctions import (
     ValidateEmail, ValidateNI, ValidatePhone
 )
@@ -44,6 +44,7 @@ class TenantService:
         
         except Exception:
             Connection.rollback()
+            raise
         
         finally:
             Connection.close()

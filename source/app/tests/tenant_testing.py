@@ -1,7 +1,12 @@
 import os
 import sqlite3
+import sys
 from datetime import date
-from source.app.databases.Database import Get_Connection, Create_Tables, DatabasePath
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from source.app.databases.database import Get_Connection, Create_Tables, DatabasePath
 from source.app.services.TenantService import TenantService
 
 def CreateTempSeed():

@@ -1,5 +1,10 @@
 import os
-from source.app.databases.Database import DatabasePath, Create_Tables, Get_Connection
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from source.app.databases.database import DatabasePath, Create_Tables, Get_Connection
 from source.app.services.TenantService import TenantService
 from source.app.services.MaintenanceService import MaintenanceService
 
