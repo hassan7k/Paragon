@@ -1,7 +1,9 @@
+from os import name
 import tkinter as tk
 from tkinter import messagebox
 from source.app.controllers.Auth import AuthController
 from source.app.ui.MaintenanceUI import MaintenanceUI
+from source.app.ui.FinanceUI import FinanceUI
 
 
 class LoginUI(tk.Frame):
@@ -105,6 +107,9 @@ class LoginUI(tk.Frame):
             user = AuthController.Login(username, password)
             role = user["role"]
 
+            self.parent.withdraw()
+            self.clear_fields()
+
             if role == "MAINTENANCE":
                 messagebox.showinfo("Login Success", f"Welcome {user['username']} ({role})")
 
@@ -117,11 +122,25 @@ class LoginUI(tk.Frame):
                 # Open maintenance dashboard
                 MaintenanceUI(self.parent, user)
 
+            elif role == "FINANCE":
+                messagebox.showinfo("Login Success", f"Welcome {user['username']} ({role})")
+                FinanceUI(self.parent, user)
+
             else:
                 messagebox.showinfo(
                     "Login Success",
-                    f"Logged in as {user['username']} ({role}).\nOnly Maintenance UI is connected right now."
+                    f"Logged in as {user['username']} ({role}).\n"
+                    "This role does not have a connected UI yet."
                 )
+                self.parent.deiconify()
 
         except Exception as error:
             messagebox.showerror("Login Failed", str(error))
+
+if name == "__main__":
+    root = tk.Tk()
+    root.title("Paragon Login")
+    root.geometry("600x400")
+    root.resizable(False, False)
+    LoginUI(root)
+    root.mainloop()

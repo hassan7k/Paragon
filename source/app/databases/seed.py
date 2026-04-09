@@ -82,6 +82,12 @@ def Seed_Test_Data():
     except ValueError:
         pass
 
+    print("SEED DATA FINANCE")
+    try:
+        AuthService.CreateUser("finance1", "pass123", "FINANCE", 1)
+    except ValueError:
+        pass
+
     try:
         AuthService.CreateUser("admin1", "pass123", "ADMIN", 1)
     except ValueError:
