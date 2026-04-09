@@ -2,11 +2,13 @@ import sqlite3
 from source.app.services.GlobalFunctions import PasswordFunctions
 from source.app.databases.database import Get_Connection
 
+
 class AuthService:
 
     @staticmethod
-    def CreateUser(Username: str, Password: str, Role: str, LocationId: int) -> bool:
+    def CreateUser(Username: str, Password: str, Role: str, LocationId: int):
         ValidRoles = ("FRONT_DESK", "FINANCE", "MAINTENANCE", "ADMIN", "MANAGER")
+
         if not Username or not Username.strip():
             raise ValueError("Username cannot be blank.")
         if not Password or not Password.strip():
@@ -14,10 +16,10 @@ class AuthService:
         if Role not in ValidRoles:
             raise ValueError("Role is invalid.")
         if LocationId <= 0:
-            raise ValueError("Location Id is invalid.")
-        
+            raise ValueError("Location ID is invalid.")
+
         PasswordHash = PasswordFunctions.HashPassword(Password)
-        
+
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()
@@ -25,6 +27,7 @@ class AuthService:
                 INSERT INTO Users (username, password_hash, role, location_id)
                 VALUES (?, ?, ?, ?)
             """, (Username.strip(), PasswordHash, Role, LocationId))
+
             UserId = Cursor.lastrowid
             Connection.commit()
             return UserId
@@ -37,6 +40,7 @@ class AuthService:
                 raise ValueError("Username already exists.") from FailError
             if "FOREIGN KEY constraint failed" in Message:
                 raise ValueError("Location does not exist.") from FailError
+
             raise ValueError("Database integrity error while creating user.") from FailError
 
         except Exception:
@@ -70,7 +74,6 @@ class AuthService:
             "location_id": LocationId
         }
 
-    
     @staticmethod
     def GetUserByUsername(Username: str):
         if not Username or not Username.strip():
@@ -89,10 +92,8 @@ class AuthService:
         finally:
             Connection.close()
 
-    
     @staticmethod
     def CheckPermission(Role: str, RequiredRoles: tuple) -> bool:
         if not Role or not RequiredRoles:
             return False
-
         return Role in RequiredRoles
