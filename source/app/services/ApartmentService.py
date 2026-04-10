@@ -129,3 +129,17 @@ class ApartmentService:
 
         finally:
             Connection.close()
+
+    @staticmethod
+    def GetAllApartments():
+        Connection = Get_Connection()
+        try:
+            Cursor = Connection.cursor()
+            Cursor.execute("""
+                SELECT apartment_id, location_id, apartment_number, type, rooms, monthly_rent, status
+                FROM Apartment
+                ORDER BY location_id, apartment_number
+            """)
+            return Cursor.fetchall()
+        finally:
+            Connection.close()

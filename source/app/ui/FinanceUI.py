@@ -339,7 +339,10 @@ class FinanceUI(tk.Toplevel):
         try:
             total = FinanceController.CalculateTotals()
             messagebox.showinfo(
-                "Totals", f"Total Collected: £{total['collected']}\nTotal Pending: £{total['pending']}")
+                "Totals",
+                f"Total Collected: £{total['total_collected']}\n"
+                f"Total Pending: £{total['pending']}"
+            )
         except Exception as e:
             messagebox.showerror("Error", str(e))
 

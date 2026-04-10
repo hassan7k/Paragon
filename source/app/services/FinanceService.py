@@ -194,12 +194,23 @@ class FinanceService:
         try:
             Cursor = Connection.cursor()
             Cursor.execute("""
-                SELECT invoice_id, lease_id, due_date, amount_due, status
-                FROM Invoice
-                ORDER BY due_date
+                SELECT
+                    i.invoice_id,
+                    i.lease_id,
+                    l.tenant_id,
+                    i.amount_due,
+                    i.due_date,
+                    i.status,
+                    IFNULL(SUM(p.amount), 0) AS paid_amount,
+                    MAX(p.payment_date) AS payment_date,
+                    i.amount_due AS total_due
+                FROM Invoice i
+                INNER JOIN Lease l ON i.lease_id = l.lease_id
+                LEFT JOIN Payment p ON i.invoice_id = p.invoice_id
+                GROUP BY i.invoice_id, i.lease_id, l.tenant_id, i.amount_due, i.due_date, i.status
+                ORDER BY i.due_date
             """)
             return Cursor.fetchall()
-
         finally:
             Connection.close()
 
@@ -209,12 +220,16 @@ class FinanceService:
         try:
             Cursor = Connection.cursor()
             Cursor.execute("""
-                SELECT payment_id, invoice_id, payment_date, amount
+                SELECT
+                    payment_id,
+                    invoice_id,
+                    amount,
+                    payment_date,
+                    'CARD' AS method
                 FROM Payment
                 ORDER BY payment_date
             """)
             return Cursor.fetchall()
-
         finally:
             Connection.close()
     
@@ -296,5 +311,109 @@ class FinanceService:
 
             return TotalCost
 
+        finally:
+            Connection.close()
+
+    @staticmethod
+    def GetInvoicesByTenant(TenantId: int):
+        if TenantId <= 0:
+            raise ValueError("Invalid tenant ID.")
+        
+        Connection = Get_Connection()
+        try:
+            Cursor = Connection.cursor()
+            Cursor.execute("""
+                SELECT
+                    i.invoice_id,
+                    i.lease_id,
+                    l.tenant_id,
+                    i.amount_due,
+                    i.due_date,
+                    i.status,
+                    IFNULL(SUM(p.amount), 0) AS paid_amount,
+                    MAX(p.payment_date) AS payment_date,
+                    i.amount_due AS total_due
+                FROM Invoice i
+                INNER JOIN Lease l ON i.lease_id = l.lease_id
+                LEFT JOIN Payment p ON i.invoice_id = p.invoice_id
+                WHERE l.tenant_id = ?
+                GROUP BY i.invoice_id, i.lease_id, l.tenant_id, i.amount_due, i.due_date, i.status
+                ORDER BY i.due_date
+            """, (TenantId,))
+            return Cursor.fetchall()
+        finally:
+            Connection.close()
+
+    @staticmethod
+    def GetPaymentsByTenant(TenantId: int):
+        if TenantId <= 0:
+            raise ValueError("Invalid tenant ID.")
+
+        Connection = Get_Connection()
+        try:
+            Cursor = Connection.cursor()
+            Cursor.execute("""
+                SELECT p.payment_id, p.invoice_id, p.payment_date, p.amount
+                FROM Payment p
+                INNER JOIN Invoice i ON p.invoice_id = i.invoice_id
+                INNER JOIN Lease l ON i.lease_id = l.lease_id
+                WHERE l.tenant_id = ?
+                ORDER BY p.payment_date
+            """, (TenantId,))
+            return Cursor.fetchall()
+        
+        finally:
+            Connection.close()
+
+    @staticmethod
+    def GetInvoiceById(InvoiceId: int):
+        if InvoiceId <= 0:
+            raise ValueError("Invalid invoice ID.")
+
+        Connection = Get_Connection()
+        try:
+            Cursor = Connection.cursor()
+            Cursor.execute("""
+                SELECT
+                    i.invoice_id,
+                    i.lease_id,
+                    l.tenant_id,
+                    i.amount_due,
+                    i.due_date,
+                    i.status,
+                    IFNULL(SUM(p.amount), 0) AS paid_amount,
+                    MAX(p.payment_date) AS payment_date,
+                    i.amount_due AS total_due
+                FROM Invoice i
+                INNER JOIN Lease l ON i.lease_id = l.lease_id
+                LEFT JOIN Payment p ON i.invoice_id = p.invoice_id
+                WHERE i.invoice_id = ?
+                GROUP BY i.invoice_id, i.lease_id, l.tenant_id, i.amount_due, i.due_date, i.status
+            """, (InvoiceId,))
+            row = Cursor.fetchone()
+            return [row] if row else []
+        finally:
+            Connection.close()
+
+    @staticmethod
+    def GetPaymentsByInvoice(InvoiceId: int):
+        if InvoiceId <= 0:
+            raise ValueError("Invalid invoice ID.")
+
+        Connection = Get_Connection()
+        try:
+            Cursor = Connection.cursor()
+            Cursor.execute("""
+                SELECT
+                    payment_id,
+                    invoice_id,
+                    amount,
+                    payment_date,
+                    'CARD' AS method
+                FROM Payment
+                WHERE invoice_id = ?
+                ORDER BY payment_date
+            """, (InvoiceId,))
+            return Cursor.fetchall()
         finally:
             Connection.close()

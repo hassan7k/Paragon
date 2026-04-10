@@ -4,6 +4,10 @@ from tkinter import messagebox
 from source.app.controllers.Auth import AuthController
 from source.app.ui.MaintenanceUI import MaintenanceUI
 from source.app.ui.FinanceUI import FinanceUI
+from source.app.ui.TenantUI import TenantUI
+from source.app.ui.PaymentUI import PaymentUI
+from source.app.ui.ComplaintUI import ComplaintUI
+from source.app.ui.LeaseUI import LeaseUI
 
 
 class LoginUI(tk.Frame):
@@ -124,7 +128,25 @@ class LoginUI(tk.Frame):
 
             elif role == "FINANCE":
                 messagebox.showinfo("Login Success", f"Welcome {user['username']} ({role})")
+
+                # Hide login window
+                self.parent.withdraw()
+
+                # Clear fields for next login
+                self.clear_fields()
+
                 FinanceUI(self.parent, user)
+            
+            elif role == "FRONT_DESK":
+                messagebox.showinfo("Login Success", f"Welcome {user['username']} ({role})")
+                
+                # Hide login window
+                self.parent.withdraw()
+
+                # Clear fields for next login
+                self.clear_fields()
+
+                TenantUI(self.parent, user)
 
             else:
                 messagebox.showinfo(

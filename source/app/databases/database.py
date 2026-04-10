@@ -134,14 +134,16 @@ def Create_Tables():
 
     # Complaints table
     Cursor.execute("""
-    CREATE TABLE IF NOT EXISTS Complaint (
+        CREATE TABLE IF NOT EXISTS Complaint (
         complaint_id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id INTEGER NOT NULL,
+        apartment_id INTEGER,
         description TEXT NOT NULL,
         status TEXT DEFAULT 'OPEN'
             CHECK(status IN ('OPEN','CLOSED')),
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (tenant_id) REFERENCES Tenant(tenant_id)
+        FOREIGN KEY (tenant_id) REFERENCES Tenant(tenant_id),
+        FOREIGN KEY (apartment_id) REFERENCES Apartment(apartment_id)
     );
     """)
 
