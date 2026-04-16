@@ -146,32 +146,88 @@ class TenantService:
         return data
     
     @staticmethod
-    def UpdateTenant(ni, first, last, phone, email,
-                     occupation, reference, requirement, lease_years):
+    def UpdateTenant(TenantIdentifier, *args):
+        conn = Get_Connection()
+        cur = conn.cursor()
 
-        ni = ValidateNI(ni)
-        phone = ValidatePhone(phone)
-        email = ValidateEmail(email)
+        try:
+            if len(args) == 4:
+                Phone, Email, Occupation, Reference = args
+
+                if TenantIdentifier <= 0:
+                    raise ValueError("Tenant ID is invalid.")
+
+                Phone = ValidatePhone(Phone)
+                Email = ValidateEmail(Email)
+
+                cur.execute("""
+                    UPDATE Tenant
+                    SET phone = ?, email = ?, occupation = ?, tenant_references = ?
+                    WHERE tenant_id = ? AND is_active = 1
+                """, (Phone, Email, Occupation, Reference, TenantIdentifier))
+
+            elif len(args) == 8:
+                first, last, phone, email, occupation, reference, requirement, lease_years = args
+
+                NI = ValidateNI(TenantIdentifier)
+                phone = ValidatePhone(phone)
+                email = ValidateEmail(email)
+
+                cur.execute("""
+                    UPDATE Tenant
+                    SET first_name = ?, last_name = ?, phone = ?, email = ?,
+                        occupation = ?, tenant_references = ?
+                    WHERE ni_number = ? AND is_active = 1
+                """, (
+                    first, last, phone, email,
+                    occupation, reference, NI
+                ))
+            else:
+                raise TypeError("UpdateTenant expects either 5 or 9 positional arguments.")
+
+            if cur.rowcount == 0:
+                raise ValueError("Tenant not found")
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    @staticmethod
+    def DeactivateTenant(TenantId: int):
+        if TenantId <= 0:
+            raise ValueError("Tenant ID is invalid.")
 
         conn = Get_Connection()
         cur = conn.cursor()
 
-        cur.execute("""
-        UPDATE Tenant
-        SET first_name=?, last_name=?, phone=?, email=?,
-            occupation=?, tenant_references=?
-        WHERE ni_number=?
-        """, (
-            first, last, phone, email,
-            occupation, reference, ni
-        ))
+        try:
+            cur.execute("""
+                SELECT 1
+                FROM Lease
+                WHERE tenant_id = ? AND status = 'ACTIVE'
+                LIMIT 1
+            """, (TenantId,))
+            if cur.fetchone():
+                raise ValueError("Cannot deactivate a tenant with an active lease.")
 
-        if cur.rowcount == 0:
+            cur.execute("""
+                UPDATE Tenant
+                SET is_active = 0
+                WHERE tenant_id = ? AND is_active = 1
+            """, (TenantId,))
+
+            if cur.rowcount == 0:
+                raise ValueError("Tenant not found")
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
             conn.close()
-            raise ValueError("Tenant not found")
-
-        conn.commit()
-        conn.close()
 
     @staticmethod
     def DeleteTenant(ni):

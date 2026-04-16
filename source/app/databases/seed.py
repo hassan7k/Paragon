@@ -57,7 +57,7 @@ def Seed_Test_Data():
         "EF345678A", "Michael", "Brown", "07000111222",
         "michael.brown@email.com", "Developer", "Reference 3"
     ))
-
+ 
     # Insert new apartment
     Cursor.execute("""
         INSERT OR IGNORE INTO Apartment (
@@ -99,8 +99,8 @@ def Seed_Test_Data():
 
     try:
         AuthService.CreateUser("admin1", "pass123", "ADMIN", 1)
-    except ValueError:
-        pass
+    except ValueError as e:
+        print(f"Admin seed skipped: {e}")
 
     print("Test data inserted successfully.")
     print("Maintenance login: maint1 / pass123")

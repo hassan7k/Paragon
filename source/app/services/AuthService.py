@@ -85,7 +85,7 @@ class AuthService:
             Cursor.execute("""
                 SELECT user_id, username, password_hash, role, location_id
                 FROM Users
-                WHERE username = ?
+                WHERE username = ? AND is_active = 1
             """, (Username.strip(),))
             return Cursor.fetchone()
 

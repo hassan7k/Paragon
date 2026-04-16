@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import date
+from datetime import date, datetime
 from source.app.databases.database import Get_Connection
 
 class LeaseService:
@@ -151,21 +151,30 @@ class LeaseService:
             Connection.close()
 
     @staticmethod
-    def TerminateLease(ni: str):
+    def TerminateLease(LeaseIdentifier):
         Connection = Get_Connection()
         try:
             Cursor = Connection.cursor()
 
-            Cursor.execute("""
-                SELECT l.lease_id, l.apartment_id
-                FROM Lease l
-                INNER JOIN Tenant t ON l.tenant_id = t.tenant_id
-                WHERE t.ni_number = ? AND l.status = 'ACTIVE'
-            """, (ni,))
+            if isinstance(LeaseIdentifier, int):
+                if LeaseIdentifier <= 0:
+                    raise ValueError("Invalid lease ID.")
+                Cursor.execute("""
+                    SELECT lease_id, apartment_id
+                    FROM Lease
+                    WHERE lease_id = ? AND status = 'ACTIVE'
+                """, (LeaseIdentifier,))
+            else:
+                Cursor.execute("""
+                    SELECT l.lease_id, l.apartment_id
+                    FROM Lease l
+                    INNER JOIN Tenant t ON l.tenant_id = t.tenant_id
+                    WHERE t.ni_number = ? AND l.status = 'ACTIVE'
+                """, (LeaseIdentifier,))
             lease = Cursor.fetchone()
 
             if not lease:
-                raise ValueError("Active lease not found for tenant.")
+                raise ValueError("Active lease not found.")
 
             lease_id, apartment_id = lease
 
@@ -188,5 +197,166 @@ class LeaseService:
             Connection.rollback()
             raise
 
+        finally:
+            Connection.close()
+        
+    @staticmethod
+    def TerminateLeaseEarly(LeaseId: int, NoticeGivenDate: str) -> dict:
+        """
+        Terminate a lease early with 1-month notice requirement and 5% penalty.
+
+        Parameters:
+            LeaseId        : ID of the lease to terminate
+            NoticeGivenDate: 'YYYY-MM-DD' — date tenant gave notice
+
+        Returns dict:
+            is_early          : bool
+            penalty_amount    : float (0.0 if not early)
+            penalty_invoice_id: int or None
+
+        Raises ValueError if:
+            - Notice period < 30 days
+            - Lease not ACTIVE
+            - Lease not found
+        """
+        if LeaseId <= 0:
+            raise ValueError("Invalid Lease Id.")
+
+        try:
+            NoticeDate = datetime.strptime(NoticeGivenDate, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Notice date must be in format YYYY-MM-DD.")
+
+        Today = date.today()
+
+        # Enforce 1-month notice period
+        if (Today - NoticeDate).days < 30:
+            DaysShort = 30 - (Today - NoticeDate).days
+            raise ValueError(
+                f"Tenant must give at least 1 month notice. "
+                f"{DaysShort} more day(s) required before termination."
+            )
+
+        Connection = Get_Connection()
+        try:
+            Cursor = Connection.cursor()
+
+            Cursor.execute("""
+                SELECT apartment_id, end_date, agreed_monthly_rent, status
+                FROM Lease WHERE lease_id = ?
+            """, (LeaseId,))
+            Row = Cursor.fetchone()
+            if not Row:
+                raise ValueError("Lease not found.")
+
+            ApartmentId, EndDate, MonthlyRent, Status = Row
+
+            if Status != "ACTIVE":
+                raise ValueError("Only ACTIVE leases can be terminated.")
+
+            # Determine if this is truly early
+            OriginalEnd = datetime.strptime(EndDate, "%Y-%m-%d").date()
+            IsEarly = Today < OriginalEnd
+
+            PenaltyAmount = round(MonthlyRent * 0.05, 2) if IsEarly else 0.0
+            PenaltyInvoiceId = None
+
+            # Create penalty invoice if leaving early
+            if IsEarly:
+                Cursor.execute("""
+                    INSERT INTO Invoice (lease_id, due_date, amount_due, status)
+                    VALUES (?, DATE('now'), ?, 'PENDING')
+                """, (LeaseId, PenaltyAmount))
+                PenaltyInvoiceId = Cursor.lastrowid
+
+            # Terminate lease
+            Cursor.execute("""
+                UPDATE Lease SET status = 'TERMINATED', end_date = DATE('now')
+                WHERE lease_id = ?
+            """, (LeaseId,))
+
+            # Release apartment
+            Cursor.execute("""
+                UPDATE Apartment SET status = 'AVAILABLE'
+                WHERE apartment_id = ?
+            """, (ApartmentId,))
+
+            Connection.commit()
+
+            return {
+                "is_early": IsEarly,
+                "penalty_amount": PenaltyAmount,
+                "penalty_invoice_id": PenaltyInvoiceId
+            }
+        except:
+            Connection.rollback()
+            raise
+        
+        finally:
+            Connection.close()
+
+
+    @staticmethod
+    def GetAllLeases():
+        Connection = Get_Connection()
+        try:
+            Cursor = Connection.cursor()
+            Cursor.execute("""
+                SELECT l.lease_id, t.first_name || ' ' || t.last_name,
+                       t.ni_number, a.apartment_number, loc.city,
+                       l.start_date, l.end_date, l.agreed_monthly_rent,
+                       l.deposit_amount, l.status
+                FROM Lease l
+                JOIN Tenant t ON l.tenant_id = t.tenant_id
+                JOIN Apartment a ON l.apartment_id = a.apartment_id
+                JOIN Location loc ON a.location_id = loc.location_id
+                ORDER BY l.lease_id DESC
+            """)
+            return Cursor.fetchall()
+        finally:
+            Connection.close()
+
+    @staticmethod
+    def GetLeasesByLocation(LocationId: int):
+        """Return all leases for apartments in a specific location."""
+        if LocationId <= 0:
+            raise ValueError("Invalid Location Id.")
+        Connection = Get_Connection()
+        try:
+            Cursor = Connection.cursor()
+            Cursor.execute("""
+                SELECT l.lease_id, t.first_name || ' ' || t.last_name,
+                       t.ni_number, a.apartment_number, loc.city,
+                       l.start_date, l.end_date, l.agreed_monthly_rent,
+                       l.deposit_amount, l.status
+                FROM Lease l
+                JOIN Tenant t ON l.tenant_id = t.tenant_id
+                JOIN Apartment a ON l.apartment_id = a.apartment_id
+                JOIN Location loc ON a.location_id = loc.location_id
+                WHERE a.location_id = ?
+                ORDER BY l.lease_id DESC
+            """, (LocationId,))
+            return Cursor.fetchall()
+        finally:
+            Connection.close()
+
+    @staticmethod
+    def GetActiveLeases():
+        Connection = Get_Connection()
+        try:
+            Cursor = Connection.cursor()
+            Cursor.execute("""
+                SELECT l.lease_id, t.first_name || ' ' || t.last_name,
+                       t.ni_number, a.apartment_number, loc.city,
+                       l.start_date, l.end_date, l.agreed_monthly_rent,
+                       l.deposit_amount, l.status
+                FROM Lease l
+                JOIN Tenant t ON l.tenant_id = t.tenant_id
+                JOIN Apartment a ON l.apartment_id = a.apartment_id
+                JOIN Location loc ON a.location_id = loc.location_id
+                WHERE l.status = 'ACTIVE'
+                ORDER BY l.lease_id DESC
+            """)
+            return Cursor.fetchall()
         finally:
             Connection.close()

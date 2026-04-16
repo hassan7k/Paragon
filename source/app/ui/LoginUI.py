@@ -2,6 +2,7 @@ from os import name
 import tkinter as tk
 from tkinter import messagebox
 from source.app.controllers.Auth import AuthController
+from source.app.ui.AdminUI import AdminUI
 from source.app.ui.MaintenanceUI import MaintenanceUI
 from source.app.ui.FinanceUI import FinanceUI
 from source.app.ui.TenantUI import TenantUI
@@ -147,6 +148,18 @@ class LoginUI(tk.Frame):
                 self.clear_fields()
 
                 TenantUI(self.parent, user)
+
+            elif role == "ADMIN":
+                messagebox.showinfo("Login Success", f"Welcome {user['username']} ({role})")
+                AdminUI(self.parent, user)
+                self.clear_fields()
+                self.parent.withdraw()
+
+            elif role == "MANAGER":
+                messagebox.showinfo("Login Success", f"Welcome {user['username']} ({role})")
+                AdminUI(self.parent, user)
+                self.clear_fields()
+                self.parent.withdraw()
 
             else:
                 messagebox.showinfo(

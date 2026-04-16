@@ -11,6 +11,12 @@ def Get_Connection():
     Connection.execute("PRAGMA foreign_keys = ON;")
     return Connection
 
+def _EnsureColumn(Cursor, TableName: str, ColumnName: str, Definition: str):
+    Cursor.execute(f"PRAGMA table_info({TableName})")
+    ExistingColumns = {Row[1] for Row in Cursor.fetchall()}
+    if ColumnName not in ExistingColumns:
+        Cursor.execute(f"ALTER TABLE {TableName} ADD COLUMN {ColumnName} {Definition}")
+
 def Create_Tables():
     Connection = Get_Connection()
     Cursor = Connection.cursor()
@@ -32,6 +38,7 @@ def Create_Tables():
         role TEXT NOT NULL CHECK(role IN 
             ('FRONT_DESK','FINANCE','MAINTENANCE','ADMIN','MANAGER')),
         location_id INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
         FOREIGN KEY (location_id) REFERENCES Location(location_id)
     );
     """)
@@ -47,6 +54,7 @@ def Create_Tables():
         email TEXT NOT NULL,
         occupation TEXT,
         tenant_references TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
     """)
@@ -158,6 +166,10 @@ def Create_Tables():
     Cursor.execute("CREATE INDEX IF NOT EXISTS idx_maintenance_status ON MaintenanceRequest(status);")
     Cursor.execute("CREATE INDEX IF NOT EXISTS idx_maintenance_priority ON MaintenanceRequest(priority);")
     Cursor.execute("CREATE INDEX IF NOT EXISTS idx_maintenance_tenant ON MaintenanceRequest(tenant_id);")
+
+    # Backfill columns for databases created before the admin merge.
+    _EnsureColumn(Cursor, "Users", "is_active", "INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1))")
+    _EnsureColumn(Cursor, "Tenant", "is_active", "INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1))")
 
     Connection.commit()
     Connection.close()
