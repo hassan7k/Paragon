@@ -22,3 +22,7 @@ class LeaseController:
     @staticmethod
     def GetAllLeases():
         return LeaseService.GetAllLeases()
+    
+    @staticmethod
+    def GetLeasesByLocation(LocationId):
+        return LeaseService.GetLeasesByLocation(LocationId)

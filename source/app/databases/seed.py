@@ -83,6 +83,11 @@ def Seed_Test_Data():
         pass
 
     try:
+        AuthService.CreateUser("maint2", "pass123", "MAINTENANCE", 2)
+    except ValueError:
+        pass
+
+    try:
         AuthService.CreateUser("finance1", "pass123", "FINANCE", 1)
     except ValueError:
         pass
@@ -98,15 +103,28 @@ def Seed_Test_Data():
         pass
 
     try:
+        AuthService.CreateUser("frontdesk2", "pass123", "FRONT_DESK", 2)
+    except ValueError:
+        pass
+
+    try:
         AuthService.CreateUser("admin1", "pass123", "ADMIN", 1)
+    except ValueError as e:
+        print(f"Admin seed skipped: {e}")
+
+    try:
+        AuthService.CreateUser("admin2", "pass123", "ADMIN", 2)
     except ValueError as e:
         print(f"Admin seed skipped: {e}")
 
     print("Test data inserted successfully.")
     print("Maintenance login: maint1 / pass123")
+    print("Maintenance login: maint2 / pass123")
     print("Finance login: finance1 / pass123")
     print("Manager login: manager1 / manager123")
     print("Admin login: admin1 / pass123")
+    print("Admin login: admin2 / pass123")
+
 
 
 if __name__ == "__main__":
