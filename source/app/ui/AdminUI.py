@@ -114,6 +114,34 @@ class AdminUI(tk.Toplevel):
               foreground=[("selected", "#020617")])
         return frame, tree
 
+    def _load_location_options(self):
+        """Returns [(location_id, city), ...] for location dropdowns."""
+        try:
+            rows = AdminController.GetAllLocations()
+        except Exception:
+            rows = []
+        options = []
+        for row in rows:
+            try:
+                options.append((int(row[0]), str(row[1])))
+            except Exception:
+                continue
+        return options
+
+    def _set_location_combobox_values(self, combo):
+        options = self._load_location_options()
+        display = [f"{loc_id} - {city}" for loc_id, city in options]
+        combo["values"] = display
+        return options
+
+    def _parse_location_choice(self, value: str):
+        if not value:
+            return None
+        try:
+            return int(str(value).split(" - ", 1)[0])
+        except Exception:
+            return None
+
 
     def _scope_text(self):
         if self.role == "MANAGER":
@@ -322,12 +350,40 @@ class AdminUI(tk.Toplevel):
                  bg=BG, fg="#64748b", font=("Segoe UI", 8, "italic")).grid(
             row=2, column=0, columnspan=5, pady=2, sticky="w")
 
+        # ── Search / Filter row ─────────────────────────
+        search_row = tk.Frame(tab, bg=BG)
+        search_row.pack(fill="x", padx=20, pady=(0, 4))
+
+        tk.Label(search_row, text="Search Tenant", bg=BG, fg=FG,
+                 font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+        self._ten_search_entry = self._entry(search_row, width=22)
+        self._ten_search_entry.pack(side="left", padx=(0, 10))
+
+        tk.Label(search_row, text="Occupation", bg=BG, fg=FG,
+                 font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+        self._ten_occ_entry = self._entry(search_row, width=18)
+        self._ten_occ_entry.pack(side="left", padx=(0, 10))
+
+        self._button(search_row, "Apply Search", self._refresh_tenants).pack(side="left", padx=4)
+        self._button(search_row, "Clear Search", self._clear_tenant_search, YELLOW).pack(side="left", padx=4)
+
         # ── Treeview ─────────────────────────────────────
         cols = ("ID", "NI", "First", "Last", "Phone", "Email", "Occupation", "Reference", "Created")
         w    = [50, 100, 90, 90, 110, 160, 90, 120, 130]
         self._ten_frame, self._ten_tree = self._treeview(tab, cols, w)
         self._ten_frame.pack(fill="both", expand=True, padx=20, pady=4)
         self._ten_tree.bind("<<TreeviewSelect>>", self._on_tenant_select)
+
+        if self.role == "MANAGER":
+            filter_row = tk.Frame(tab, bg=BG)
+            filter_row.pack(fill="x", padx=20, pady=(0, 4))
+            tk.Label(filter_row, text="Location View", bg=BG, fg=FG, font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+            self._ten_filter_combo = ttk.Combobox(filter_row, state="readonly", width=22)
+            self._ten_filter_combo.pack(side="left")
+            opts = ["All Locations"] + [f"{loc_id} - {city}" for loc_id, city in self._load_location_options()]
+            self._ten_filter_combo["values"] = opts
+            self._ten_filter_combo.current(0)
+            self._ten_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_tenants())
 
         row = tk.Frame(tab, bg=BG)
         row.pack(pady=8)
@@ -365,6 +421,13 @@ class AdminUI(tk.Toplevel):
         except Exception as err:
             messagebox.showerror("Error", str(err))
 
+    def _clear_tenant_search(self):
+        if hasattr(self, "_ten_search_entry"):
+            self._ten_search_entry.delete(0, "end")
+        if hasattr(self, "_ten_occ_entry"):
+            self._ten_occ_entry.delete(0, "end")
+        self._refresh_tenants()
+
     def _update_tenant(self):
         sel = self._ten_tree.selection()
         if not sel:
@@ -388,7 +451,48 @@ class AdminUI(tk.Toplevel):
     def _refresh_tenants(self):
         self._ten_tree.delete(*self._ten_tree.get_children())
         try:
-            for r in AdminController.GetTenants(*self._R()):
+            rows = AdminController.GetTenants(*self._R())
+
+            if self.role == "MANAGER" and hasattr(self, "_ten_filter_combo"):
+                selected = self._ten_filter_combo.get()
+                selected_id = self._parse_location_choice(selected)
+                if selected and selected != "All Locations" and selected_id is not None:
+                    from source.app.databases.database import Get_Connection
+                    conn = Get_Connection()
+                    try:
+                        cur = conn.cursor()
+                        cur.execute("""
+                            SELECT DISTINCT
+                                t.tenant_id, t.ni_number, t.first_name, t.last_name,
+                                t.phone, t.email, t.occupation, t.tenant_references, t.created_at
+                            FROM Tenant t
+                            LEFT JOIN Lease l ON t.tenant_id = l.tenant_id AND l.status='ACTIVE'
+                            LEFT JOIN Apartment a ON l.apartment_id = a.apartment_id
+                            WHERE t.is_active = 1
+                              AND (a.location_id = ? OR l.lease_id IS NULL)
+                            ORDER BY t.tenant_id DESC
+                        """, (selected_id,))
+                        rows = cur.fetchall()
+                    finally:
+                        conn.close()
+
+            keyword = self._ten_search_entry.get().strip().lower() if hasattr(self, "_ten_search_entry") else ""
+            occ = self._ten_occ_entry.get().strip().lower() if hasattr(self, "_ten_occ_entry") else ""
+            if keyword or occ:
+                filtered = []
+                for r in rows:
+                    ni = str(r[1]).lower()
+                    first = str(r[2]).lower()
+                    last = str(r[3]).lower()
+                    occupation = str(r[6] or "").lower()
+                    if keyword and not (keyword in ni or keyword in first or keyword in last):
+                        continue
+                    if occ and occ not in occupation:
+                        continue
+                    filtered.append(r)
+                rows = filtered
+
+            for r in rows:
                 self._ten_tree.insert("", "end", values=r)
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -435,12 +539,38 @@ class AdminUI(tk.Toplevel):
         self._lea_frame, self._lea_tree = self._treeview(tab, cols, w)
         self._lea_frame.pack(fill="both", expand=True, padx=20, pady=4)
 
+        search_row = tk.Frame(tab, bg=BG)
+        search_row.pack(fill="x", padx=20, pady=(0, 4))
+        tk.Label(search_row, text="Search Lease", bg=BG, fg=FG,
+                 font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+        self._lea_search_entry = self._entry(search_row, width=22)
+        self._lea_search_entry.pack(side="left", padx=(0, 10))
+        self._button(search_row, "Apply Search", self._refresh_leases).pack(side="left", padx=4)
+        self._button(search_row, "Clear Search", self._clear_lease_search, YELLOW).pack(side="left", padx=4)
+
+
+        if self.role == "MANAGER":
+            filter_row = tk.Frame(tab, bg=BG)
+            filter_row.pack(fill="x", padx=20, pady=(0, 4))
+            tk.Label(filter_row, text="Location View", bg=BG, fg=FG, font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+            self._lea_filter_combo = ttk.Combobox(filter_row, state="readonly", width=22)
+            self._lea_filter_combo.pack(side="left")
+            opts = ["All Locations"] + [f"{loc_id} - {city}" for loc_id, city in self._load_location_options()]
+            self._lea_filter_combo["values"] = opts
+            self._lea_filter_combo.current(0)
+            self._lea_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_leases())
+
         row = tk.Frame(tab, bg=BG)
         row.pack(pady=8)
         self._button(row, "⟳ Refresh",           self._refresh_leases).pack(side="left", padx=5)
         self._button(row, "Standard Terminate",   self._terminate_lease, YELLOW).pack(side="left", padx=5)
         self._button(row, "Early Terminate",       self._early_terminate_lease, RED).pack(side="left", padx=5)
 
+        self._refresh_leases()
+
+    def _clear_lease_search(self):
+        if hasattr(self, "_lea_search_entry"):
+            self._lea_search_entry.delete(0, "end")
         self._refresh_leases()
 
     def _create_lease(self):
@@ -464,7 +594,48 @@ class AdminUI(tk.Toplevel):
     def _refresh_leases(self):
         self._lea_tree.delete(*self._lea_tree.get_children())
         try:
-            for r in AdminController.GetLeases(*self._R()):
+            rows = AdminController.GetLeases(*self._R())
+
+            if self.role == "MANAGER" and hasattr(self, "_lea_filter_combo"):
+                selected = self._lea_filter_combo.get()
+                selected_id = self._parse_location_choice(selected)
+                if selected and selected != "All Locations" and selected_id is not None:
+                    from source.app.databases.database import Get_Connection
+                    conn = Get_Connection()
+                    try:
+                        cur = conn.cursor()
+                        cur.execute("""
+                            SELECT l.lease_id,
+                                   t.first_name || ' ' || t.last_name AS tenant_name,
+                                   t.ni_number,
+                                   a.apartment_number,
+                                   loc.city,
+                                   l.start_date,
+                                   l.end_date,
+                                   l.agreed_monthly_rent,
+                                   l.deposit_amount,
+                                   l.status
+                            FROM Lease l
+                            JOIN Tenant t ON l.tenant_id = t.tenant_id
+                            JOIN Apartment a ON l.apartment_id = a.apartment_id
+                            JOIN Location loc ON a.location_id = loc.location_id
+                            WHERE a.location_id = ?
+                            ORDER BY l.lease_id DESC
+                        """, (selected_id,))
+                        rows = cur.fetchall()
+                    finally:
+                        conn.close()
+
+            keyword = self._lea_search_entry.get().strip().lower() if hasattr(self, "_lea_search_entry") else ""
+            if keyword:
+                filtered = []
+                for r in rows:
+                    hay = " ".join(str(x).lower() for x in r)
+                    if keyword in hay:
+                        filtered.append(r)
+                rows = filtered
+
+            for r in rows:
                 self._lea_tree.insert("", "end", values=r)
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -659,7 +830,14 @@ class AdminUI(tk.Toplevel):
     def _refresh_apartments(self):
         self._apt_tree.delete(*self._apt_tree.get_children())
         try:
-            for r in AdminController.GetApartments(*self._R()):
+            rows = AdminController.GetApartments(*self._R())
+            if self.role == "MANAGER" and hasattr(self, "_apt_filter_combo"):
+                selected = self._apt_filter_combo.get()
+                selected_id = self._parse_location_choice(selected)
+                if selected and selected != "All Locations" and selected_id is not None:
+                    city_map = {loc_id: city for loc_id, city in self._load_location_options()}
+                    rows = [r for r in rows if len(r) > 6 and str(r[6]) == city_map.get(selected_id)]
+            for r in rows:
                 self._apt_tree.insert("", "end", values=r)
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -713,6 +891,17 @@ class AdminUI(tk.Toplevel):
         self._inv_tree.tag_configure("OVERDUE", foreground="#fca5a5")
         self._inv_tree.tag_configure("PAID",    foreground="#86efac")
 
+        if self.role == "MANAGER":
+            filter_row = tk.Frame(tab, bg=BG)
+            filter_row.pack(fill="x", padx=20, pady=(0, 4))
+            tk.Label(filter_row, text="Location View", bg=BG, fg=FG, font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+            self._inv_filter_combo = ttk.Combobox(filter_row, state="readonly", width=22)
+            self._inv_filter_combo.pack(side="left")
+            opts = ["All Locations"] + [f"{loc_id} - {city}" for loc_id, city in self._load_location_options()]
+            self._inv_filter_combo["values"] = opts
+            self._inv_filter_combo.current(0)
+            self._inv_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_invoices())
+
         self._button(tab, "⟳ Refresh", self._refresh_invoices).pack(pady=8)
         self._refresh_invoices()
 
@@ -720,16 +909,25 @@ class AdminUI(tk.Toplevel):
         self._inv_tree.delete(*self._inv_tree.get_children())
         try:
             rows = AdminController.GetAllInvoices(*self._R())
+            if self.role == "MANAGER" and hasattr(self, "_inv_filter_combo"):
+                selected = self._inv_filter_combo.get()
+                selected_id = self._parse_location_choice(selected)
+                if selected and selected != "All Locations" and selected_id is not None:
+                    city_map = {loc_id: city for loc_id, city in self._load_location_options()}
+                    rows = [r for r in rows if len(r) > 3 and str(r[3]) == city_map.get(selected_id)]
             counts = {"total": len(rows), "paid": 0, "pending": 0, "overdue": 0}
             for r in rows:
                 status = r[6]
-                tag    = status  # "PAID", "OVERDUE", or "PENDING"
+                tag    = status
                 self._inv_tree.insert("", "end", values=r, tags=(tag,))
-                if status == "PAID":    counts["paid"]    += 1
-                elif status == "OVERDUE": counts["overdue"] += 1
-                else:                   counts["pending"]  += 1
-            self._inv_summary["total"].config(  text=str(counts["total"]))
-            self._inv_summary["paid"].config(   text=str(counts["paid"]),    fg=GREEN)
+                if status == "PAID":
+                    counts["paid"] += 1
+                elif status == "OVERDUE":
+                    counts["overdue"] += 1
+                else:
+                    counts["pending"] += 1
+            self._inv_summary["total"].config(text=str(counts["total"]))
+            self._inv_summary["paid"].config(text=str(counts["paid"]), fg=GREEN)
             self._inv_summary["pending"].config(text=str(counts["pending"]), fg=YELLOW)
             self._inv_summary["overdue"].config(text=str(counts["overdue"]), fg=RED)
         except Exception as e:
@@ -747,6 +945,17 @@ class AdminUI(tk.Toplevel):
         self._comp_frame, self._comp_tree = self._treeview(tab, cols, w)
         self._comp_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
+        if self.role == "MANAGER":
+            filter_row = tk.Frame(tab, bg=BG)
+            filter_row.pack(fill="x", padx=20, pady=(0, 4))
+            tk.Label(filter_row, text="Location View", bg=BG, fg=FG, font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+            self._comp_filter_combo = ttk.Combobox(filter_row, state="readonly", width=22)
+            self._comp_filter_combo.pack(side="left")
+            opts = ["All Locations"] + [f"{loc_id} - {city}" for loc_id, city in self._load_location_options()]
+            self._comp_filter_combo["values"] = opts
+            self._comp_filter_combo.current(0)
+            self._comp_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_complaints())
+
         row = tk.Frame(tab, bg=BG)
         row.pack(pady=8)
         self._button(row, "⟳ Refresh",      self._refresh_complaints).pack(side="left", padx=5)
@@ -757,7 +966,14 @@ class AdminUI(tk.Toplevel):
     def _refresh_complaints(self):
         self._comp_tree.delete(*self._comp_tree.get_children())
         try:
-            for r in AdminController.GetComplaints(*self._R()):
+            rows = AdminController.GetComplaints(*self._R())
+            if self.role == "MANAGER" and hasattr(self, "_comp_filter_combo"):
+                selected = self._comp_filter_combo.get()
+                selected_id = self._parse_location_choice(selected)
+                if selected and selected != "All Locations" and selected_id is not None:
+                    city_map = {loc_id: city for loc_id, city in self._load_location_options()}
+                    rows = [r for r in rows if len(r) > 6 and str(r[6]) == city_map.get(selected_id)]
+            for r in rows:
                 self._comp_tree.insert("", "end", values=r)
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -772,6 +988,7 @@ class AdminUI(tk.Toplevel):
             try:
                 AdminController.CloseComplaint(cid, *self._R())
                 self._refresh_complaints()
+                self._refresh_dashboard()
             except Exception as e:
                 messagebox.showerror("Error", str(e))
 
@@ -810,6 +1027,17 @@ class AdminUI(tk.Toplevel):
         self._sta_frame, self._sta_tree = self._treeview(tab, cols, w)
         self._sta_frame.pack(fill="both", expand=True, padx=20, pady=4)
 
+        if self.role == "MANAGER":
+            filter_row = tk.Frame(tab, bg=BG)
+            filter_row.pack(fill="x", padx=20, pady=(0, 4))
+            tk.Label(filter_row, text="Location View", bg=BG, fg=FG, font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+            self._sta_filter_combo = ttk.Combobox(filter_row, state="readonly", width=22)
+            self._sta_filter_combo.pack(side="left")
+            opts = ["All Locations"] + [f"{loc_id} - {city}" for loc_id, city in self._load_location_options()]
+            self._sta_filter_combo["values"] = opts
+            self._sta_filter_combo.current(0)
+            self._sta_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_staff())
+
         row = tk.Frame(tab, bg=BG)
         row.pack(pady=8)
         self._button(row, "⟳ Refresh",          self._refresh_staff).pack(side="left", padx=5)
@@ -839,7 +1067,14 @@ class AdminUI(tk.Toplevel):
     def _refresh_staff(self):
         self._sta_tree.delete(*self._sta_tree.get_children())
         try:
-            for r in AdminController.GetStaff(*self._R()):
+            rows = AdminController.GetStaff(*self._R())
+            if self.role == "MANAGER" and hasattr(self, "_sta_filter_combo"):
+                selected = self._sta_filter_combo.get()
+                selected_id = self._parse_location_choice(selected)
+                if selected and selected != "All Locations" and selected_id is not None:
+                    city_map = {loc_id: city for loc_id, city in self._load_location_options()}
+                    rows = [r for r in rows if len(r) > 3 and str(r[3]) == city_map.get(selected_id)]
+            for r in rows:
                 self._sta_tree.insert("", "end", values=r)
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -891,6 +1126,16 @@ class AdminUI(tk.Toplevel):
             messagebox.showinfo("Success", f"Location '{city}' added.")
             self._loc_entry.delete(0, "end")
             self._refresh_locations()
+            self._refresh_dashboard()
+            for combo_name in ("_apt_location_combo", "_apt_filter_combo", "_inv_filter_combo", "_comp_filter_combo", "_sta_filter_combo", "_ten_filter_combo", "_lea_filter_combo"):
+                combo = getattr(self, combo_name, None)
+                if combo:
+                    opts = ["All Locations"] + [f"{loc_id} - {city}" for loc_id, city in self._load_location_options()]
+                    if combo_name == "_apt_location_combo":
+                        opts = [f"{loc_id} - {city}" for loc_id, city in self._load_location_options()]
+                    combo["values"] = opts
+                    if opts:
+                        combo.current(0)
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
