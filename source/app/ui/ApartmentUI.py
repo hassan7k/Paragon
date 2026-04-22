@@ -1,12 +1,19 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from source.app.controllers.Apartments import ApartmentController
+from source.app.controllers.AdminController import AdminController
 
 
 class ApartmentUI(tk.Toplevel):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, user=None):
         super().__init__(parent)
+
+        self.user = user or {}
+        role = self.user.get("role")
+        if role not in ("ADMIN", "MANAGER"):
+            self.destroy()
+            raise PermissionError("Only ADMIN or MANAGER users can manage apartments.")
 
         self.title("Apartment Management")
         self.geometry("950x650")
@@ -27,7 +34,22 @@ class ApartmentUI(tk.Toplevel):
         form = tk.Frame(self, bg="#0f172a")
         form.pack(fill="x", padx=20, pady=10)
 
-        self.location_id = self.field(form, "Location ID")
+        self.location_options = []
+        loc_frame = tk.Frame(form, bg="#0f172a")
+        loc_frame.pack(fill="x", pady=5)
+        tk.Label(loc_frame, text="Location", width=32, anchor="w", fg="white", bg="#0f172a").pack(side="left")
+
+        if self.user.get("role") == "ADMIN":
+            self.location_display = tk.Entry(loc_frame, bg="#020617", fg="white", insertbackground="white")
+            self.location_display.pack(side="left", fill="x", expand=True)
+            self.location_display.insert(0, f"{self.user.get('location_id')} - Your Assigned Location")
+            self.location_display.config(state="disabled")
+            self.location_combo = None
+        else:
+            self.location_combo = ttk.Combobox(loc_frame, state="readonly")
+            self.location_combo.pack(side="left", fill="x", expand=True)
+            self.load_location_options()
+
         self.apartment_number = self.field(form, "Apartment Number")
         self.apartment_type = self.field(form, "Type")
         self.rooms = self.field(form, "Rooms")
@@ -71,18 +93,42 @@ class ApartmentUI(tk.Toplevel):
 
         return entry
 
+    def load_location_options(self):
+        try:
+            self.location_options = []
+            rows = AdminController.GetAllLocations()
+            values = []
+            for row in rows:
+                loc_id, city = int(row[0]), str(row[1])
+                self.location_options.append((loc_id, city))
+                values.append(f"{loc_id} - {city}")
+            if self.location_combo is not None:
+                self.location_combo["values"] = values
+                if values:
+                    self.location_combo.current(0)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _selected_location_id(self):
+        if self.user.get("role") == "ADMIN":
+            return int(self.user.get("location_id"))
+        raw = self.location_combo.get().strip() if self.location_combo is not None else ""
+        if not raw:
+            return None
+        return int(raw.split(" - ", 1)[0])
+
     def load_apartments(self):
         self.tree.delete(*self.tree.get_children())
-
         rows = ApartmentController.GetAllApartments()
-
+        if self.user.get("role") == "ADMIN":
+            rows = [row for row in rows if int(row[1]) == int(self.user.get("location_id"))]
         for row in rows:
             self.tree.insert("", "end", values=row)
 
     def add_apartment(self):
         try:
             ApartmentController.CreateApartment(
-                int(self.location_id.get()),
+                int(self._selected_location_id()),
                 self.apartment_number.get(),
                 self.apartment_type.get(),
                 int(self.rooms.get()),
@@ -98,7 +144,8 @@ class ApartmentUI(tk.Toplevel):
             messagebox.showerror("Error", str(e))
 
     def clear_form(self):
-        self.location_id.delete(0, tk.END)
+        if getattr(self, "location_combo", None) is not None and self.location_combo["values"]:
+            self.location_combo.current(0)
         self.apartment_number.delete(0, tk.END)
         self.apartment_type.delete(0, tk.END)
         self.rooms.delete(0, tk.END)

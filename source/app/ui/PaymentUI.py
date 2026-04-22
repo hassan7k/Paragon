@@ -5,8 +5,14 @@ from source.app.databases.database import Get_Connection
 
 class PaymentUI(tk.Toplevel):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, user=None):
         super().__init__(parent)
+
+        self.user = user or {}
+        role = self.user.get("role")
+        if role != "FINANCE":
+            self.destroy()
+            raise PermissionError("Only FINANCE users can access payment management.")
 
         self.title("Payment Management")
         self.geometry("900x600")

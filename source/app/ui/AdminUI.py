@@ -32,6 +32,15 @@ RED      = "#ef4444"
 GREEN    = "#22c55e"
 YELLOW   = "#f59e0b"
 
+TYPE_ROOM_MAP = {
+    "Studio": 1,
+    "1 Bedroom": 1,
+    "2 Bedroom": 2,
+    "3 Bedroom": 3,
+    "4 Bedroom": 4,
+    "Penthouse": 4,
+}
+
 
 class AdminUI(tk.Toplevel):
 
@@ -105,6 +114,35 @@ class AdminUI(tk.Toplevel):
               foreground=[("selected", "#020617")])
         return frame, tree
 
+
+    def _scope_text(self):
+        if self.role == "MANAGER":
+            return "All Locations"
+        try:
+            for loc_id, city in self._load_location_options():
+                if int(loc_id) == int(self.loc_id):
+                    return city
+        except Exception:
+            pass
+        return f"Location {self.loc_id}"
+
+    def _on_apartment_type_selected(self, _event=None):
+        selected = self._apt_type_combo.get().strip() if hasattr(self, "_apt_type_combo") else ""
+        if not selected:
+            return
+        rooms = TYPE_ROOM_MAP.get(selected)
+        if rooms is not None and "Rooms" in self._apt_e:
+            self._apt_e["Rooms"].delete(0, "end")
+            self._apt_e["Rooms"].insert(0, str(rooms))
+
+    def _expected_apartment_prefix(self, location_id: int):
+        try:
+            for loc_id, city in self._load_location_options():
+                if int(loc_id) == int(location_id) and city:
+                    return str(city).strip()[0].upper()
+        except Exception:
+            pass
+        return None
     # ══════════════════════════════════════════════════════
     #  NOTEBOOK
     # ══════════════════════════════════════════════════════
@@ -117,6 +155,13 @@ class AdminUI(tk.Toplevel):
         s.map("TNotebook.Tab",
               background=[("selected", ACCENT)],
               foreground=[("selected", "#020617")])
+
+        topbar = tk.Frame(self, bg=BG)
+        topbar.pack(fill="x", padx=12, pady=(10, 0))
+        tk.Label(topbar,
+                 text=f"{self.role.title()} Scope: {self._scope_text()}",
+                 bg=BG, fg="#94a3b8", font=("Segoe UI", 10, "bold")).pack(side="left")
+        self._button(topbar, "Logout", self.close, RED).pack(side="right")
 
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, padx=10, pady=10)
@@ -485,22 +530,72 @@ class AdminUI(tk.Toplevel):
     def _build_apartments(self, tab):
         self._heading(tab, "Apartment Management").pack(anchor="w", padx=20, pady=(15, 4))
 
+        helper = (
+            "Admins can add apartments only for their assigned location. Managers can choose any location. "
+            "Apartment numbers should start with the location letter, e.g. B for Bristol or L for London."
+        )
+        tk.Label(tab, text=helper, bg=BG, fg="#94a3b8", justify="left", wraplength=1200,
+                 font=("Segoe UI", 9, "italic")).pack(anchor="w", padx=20, pady=(0, 6))
+
         form = tk.Frame(tab, bg=BG_CARD, padx=14, pady=10)
         form.pack(fill="x", padx=20, pady=6)
 
-        fields = ["Location ID", "Apartment No.", "Type", "Rooms", "Monthly Rent"]
         self._apt_e = {}
-        for i, f in enumerate(fields):
-            tk.Label(form, text=f, bg=BG_CARD, fg=FG,
-                     font=("Segoe UI", 9)).grid(row=0, column=i, padx=4)
-            e = self._entry(form, width=14)
-            e.grid(row=1, column=i, padx=4, pady=4)
-            self._apt_e[f] = e
 
-        self._button(form, "Add Apartment", self._add_apartment).grid(row=1, column=len(fields), padx=8)
+        tk.Label(form, text="Location", bg=BG_CARD, fg=FG, font=("Segoe UI", 9)).grid(row=0, column=0, padx=4)
+        if self.role == "ADMIN":
+            self._apt_location_locked = tk.StringVar(value=f"{self.loc_id} - {self._scope_text()}")
+            locked = self._entry(form, width=18)
+            locked.grid(row=1, column=0, padx=4, pady=4)
+            locked.insert(0, self._apt_location_locked.get())
+            locked.config(state="disabled")
+            self._apt_location_combo = None
+        else:
+            self._apt_location_combo = ttk.Combobox(form, state="readonly", width=18)
+            self._apt_location_combo.grid(row=1, column=0, padx=4, pady=4)
+            self._set_location_combobox_values(self._apt_location_combo)
+            if self._apt_location_combo["values"]:
+                self._apt_location_combo.current(0)
+
+        tk.Label(form, text="Apartment No.", bg=BG_CARD, fg=FG, font=("Segoe UI", 9)).grid(row=0, column=1, padx=4)
+        self._apt_e["Apartment No."] = self._entry(form, width=14)
+        self._apt_e["Apartment No."].grid(row=1, column=1, padx=4, pady=4)
+
+        tk.Label(form, text="Type", bg=BG_CARD, fg=FG, font=("Segoe UI", 9)).grid(row=0, column=2, padx=4)
+        self._apt_type_combo = ttk.Combobox(
+            form, state="readonly", width=16,
+            values=list(TYPE_ROOM_MAP.keys())
+        )
+        self._apt_type_combo.grid(row=1, column=2, padx=4, pady=4)
+        self._apt_type_combo.bind("<<ComboboxSelected>>", self._on_apartment_type_selected)
+
+        tk.Label(form, text="Rooms", bg=BG_CARD, fg=FG, font=("Segoe UI", 9)).grid(row=0, column=3, padx=4)
+        self._apt_e["Rooms"] = self._entry(form, width=10)
+        self._apt_e["Rooms"].grid(row=1, column=3, padx=4, pady=4)
+
+        tk.Label(form, text="Monthly Rent", bg=BG_CARD, fg=FG, font=("Segoe UI", 9)).grid(row=0, column=4, padx=4)
+        self._apt_e["Monthly Rent"] = self._entry(form, width=14)
+        self._apt_e["Monthly Rent"].grid(row=1, column=4, padx=4, pady=4)
+
+        self._button(form, "Add Apartment", self._add_apartment).grid(row=1, column=5, padx=8)
+
+        filter_row = tk.Frame(tab, bg=BG)
+        filter_row.pack(fill="x", padx=20, pady=(0, 4))
+        if self.role == "ADMIN":
+            tk.Label(filter_row, text=f"Showing apartments for your location: {self._scope_text()}",
+                     bg=BG, fg="#94a3b8", font=("Segoe UI", 9, "italic")).pack(side="left")
+            self._apt_filter_combo = None
+        else:
+            tk.Label(filter_row, text="Location View", bg=BG, fg=FG, font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+            self._apt_filter_combo = ttk.Combobox(filter_row, state="readonly", width=22)
+            self._apt_filter_combo.pack(side="left")
+            opts = ["All Locations"] + [f"{loc_id} - {city}" for loc_id, city in self._load_location_options()]
+            self._apt_filter_combo["values"] = opts
+            self._apt_filter_combo.current(0)
+            self._apt_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_apartments())
 
         cols = ("ID", "Apt Number", "Type", "Rooms", "Rent", "Status", "City")
-        w    = [60, 110, 90, 70, 90, 110, 120]
+        w    = [60, 110, 120, 70, 90, 110, 120]
         self._apt_frame, self._apt_tree = self._treeview(tab, cols, w)
         self._apt_frame.pack(fill="both", expand=True, padx=20, pady=4)
 
@@ -515,15 +610,48 @@ class AdminUI(tk.Toplevel):
     def _add_apartment(self):
         e = self._apt_e
         try:
+            if self.role == "ADMIN":
+                location_id = self.loc_id
+            else:
+                location_id = self._parse_location_choice(self._apt_location_combo.get())
+                if not location_id:
+                    raise ValueError("Select a location before adding an apartment.")
+
+            apartment_no = e["Apartment No."].get().strip().upper()
+            apartment_type = self._apt_type_combo.get().strip()
+            rooms = int(e["Rooms"].get())
+            monthly_rent = float(e["Monthly Rent"].get())
+
+            if not apartment_no:
+                raise ValueError("Apartment number is required.")
+            if not apartment_no[0].isalpha():
+                raise ValueError("Apartment number must start with a letter.")
+            expected_prefix = self._expected_apartment_prefix(int(location_id))
+            if expected_prefix and apartment_no[0].upper() != expected_prefix:
+                raise ValueError(f"Apartment number should start with '{expected_prefix}' for this location.")
+
+            if not apartment_type:
+                raise ValueError("Select an apartment type.")
+            suggested_rooms = TYPE_ROOM_MAP.get(apartment_type)
+            if suggested_rooms is not None and apartment_type != "Penthouse" and rooms != suggested_rooms:
+                raise ValueError(f"{apartment_type} should use {suggested_rooms} room(s).")
+            if apartment_type == "Penthouse" and rooms < 4:
+                raise ValueError("Penthouse should have at least 4 rooms.")
+
             AdminController.CreateApartment(
-                int(e["Location ID"].get()),
-                e["Apartment No."].get().strip(),
-                e["Type"].get().strip(),
-                int(e["Rooms"].get()),
-                float(e["Monthly Rent"].get())
+                int(location_id),
+                apartment_no,
+                apartment_type,
+                rooms,
+                monthly_rent
             )
             messagebox.showinfo("Success", "Apartment added.")
-            for ent in e.values(): ent.delete(0, "end")
+            for ent in e.values():
+                ent.delete(0, "end")
+            if hasattr(self, "_apt_type_combo"):
+                self._apt_type_combo.set("")
+            if self.role == "MANAGER" and self._apt_location_combo and self._apt_location_combo["values"]:
+                self._apt_location_combo.current(0)
             self._refresh_apartments()
         except Exception as err:
             messagebox.showerror("Error", str(err))

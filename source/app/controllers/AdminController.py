@@ -125,15 +125,23 @@ class AdminController:
             Cursor = Connection.cursor()
             if UserRole == "ADMIN":
                 Cursor.execute("""
-                    SELECT DISTINCT t.tenant_id, t.ni_number, t.first_name, t.last_name,
-                           t.phone, t.email, t.occupation, t.tenant_references, t.created_at
+                    SELECT DISTINCT
+                        t.tenant_id,
+                        t.ni_number,
+                        t.first_name,
+                        t.last_name,
+                        t.phone,
+                        t.email,
+                        t.occupation,
+                        t.tenant_references,
+                        t.created_at
                     FROM Tenant t
-                    JOIN Lease l ON t.tenant_id = l.tenant_id
-                    JOIN Apartment a ON l.apartment_id = a.apartment_id
-                    WHERE a.location_id = ?
-                      AND t.is_active = 1
+                    LEFT JOIN Lease l ON t.tenant_id = l.tenant_id AND l.status='ACTIVE'
+                    LEFT JOIN Apartment a ON l.apartment_id = a.apartment_id
+                    WHERE t.is_active = 1
+                    AND (a.location_id = ? OR l.lease_id IS NULL)
                     ORDER BY t.tenant_id DESC
-                """, (UserLocationId,))
+                    """, (UserLocationId,))
             else:
                 Cursor.execute("""
                     SELECT tenant_id, ni_number, first_name, last_name,

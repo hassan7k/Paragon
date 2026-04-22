@@ -18,3 +18,8 @@ class ComplaintController:
     @staticmethod
     def CloseComplaint(ComplaintId):
         return ComplaintService.CloseComplaint(ComplaintId)
+    
+    @staticmethod
+    def GetComplaintsByTenant(TenantId):
+        rows = ComplaintService.GetAllComplaints()
+        return [r for r in rows if r[1] == TenantId]

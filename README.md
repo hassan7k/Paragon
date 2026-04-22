@@ -74,15 +74,17 @@ py -m source.app.databases.seed
 
 ### Default Test Accounts
 
-| Role        | Username     | Password     | Scope            |
-|------------|-------------|-------------|------------------|
-| Admin      | admin1      | pass123     | London only      |
-| Admin      | admin2      | pass123     | Bristol only     |
-| Manager    | manager1    | manager123  | All locations    |
-| Finance    | finance1    | pass123     | All locations    |
-| Front Desk | frontdesk1  | pass123     | London           |
-| Front Desk | frontdesk2  | pass123     | Bristol          |
-| Maintenance| maint1      | pass123     | London           |
+| Role         | Username            | Password     | Scope              |
+|-------------|---------------------|-------------|--------------------|
+| Admin       | admin_london        | pass123     | London only        |
+| Admin       | admin_bristol       | pass123     | Bristol only       |
+| Manager     | manager_global      | manager123  | All locations      |
+| Finance     | finance_london      | pass123     | London only        |
+| Finance     | finance_bristol     | pass123     | Bristol only       |
+| Front Desk  | frontdesk_london    | pass123     | London only        |
+| Front Desk  | frontdesk_bristol   | pass123     | Bristol only       |
+| Maintenance | maint_london        | pass123     | London only        |
+| Maintenance | maint_bristol       | pass123     | Bristol only       |
 
 ---
 
@@ -104,7 +106,7 @@ Follow this order for a clean demonstration:
 ### 1. Front Desk (Operational Flow)
 Login:
 
-frontdesk1 / pass123
+frontdesk_location / pass123
 
 
 Demonstrate:
@@ -118,7 +120,7 @@ Demonstrate:
 ### 2. Finance (Billing Flow)
 Login:
 
-finance1 / pass123
+finance_location / pass123
 
 
 Demonstrate:
@@ -132,7 +134,7 @@ Demonstrate:
 ### 3. Maintenance (Support Flow)
 Login:
 
-maint1 / pass123
+maint_location / pass123
 
 
 Demonstrate:
@@ -155,7 +157,7 @@ Demonstrate:
 ### 5. Admin (Location-Based Control)
 Login (London):
 
-admin1 / pass123
+admin_london / pass123
 
 Demonstrate:
 - Only London data is visible  
@@ -165,7 +167,7 @@ Demonstrate:
 
 Login (Bristol):
 
-admin2 / pass123
+admin_bristol / pass123
 
 Demonstrate:
 - Same views but for Bristol only  
@@ -175,7 +177,7 @@ Demonstrate:
 ### 6. Manager (Global Oversight)
 Login:
 
-manager1 / manager123
+manager_global / manager123
 
 Demonstrate:
 - All locations visible  

@@ -10,7 +10,12 @@ class ComplaintUI(tk.Toplevel):
         super().__init__(parent)
 
         self.parent = parent
-        self.user = user
+        self.user = user or {}
+        self.role = self.user.get("role")
+
+        if self.role not in ("FRONT_DESK", "ADMIN", "MANAGER"):
+            self.destroy()
+            raise PermissionError("Only FRONT_DESK, ADMIN, or MANAGER users can access complaints.")
 
         self.title("Complaint Management")
         self.geometry("1000x600")
@@ -56,9 +61,10 @@ class ComplaintUI(tk.Toplevel):
                   bg="#3b82f6", fg="black",
                   command=self.load_complaints).pack(side="left", padx=5)
 
-        tk.Button(btn_frame, text="Close Complaint",
-                  bg="#f59e0b", fg="black",
-                  command=self.close_complaint).pack(side="left", padx=5)
+        if self.role in ("ADMIN", "MANAGER"):
+            tk.Button(btn_frame, text="Close Complaint",
+                      bg="#f59e0b", fg="black",
+                      command=self.close_complaint).pack(side="left", padx=5)
 
         tk.Button(btn_frame, text="Close Window",
                   bg="#ef4444", fg="black",

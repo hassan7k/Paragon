@@ -2,18 +2,37 @@ from source.app.databases.database import Get_Connection, Create_Tables
 from source.app.services.AuthService import AuthService
 
 
+def _get_location_id(cursor, city: str) -> int:
+    cursor.execute("SELECT location_id FROM Location WHERE city = ?", (city,))
+    row = cursor.fetchone()
+    if not row:
+        raise ValueError(f"Location not found: {city}")
+    return row[0]
+
+
+def _safe_create_user(username, password, role, location_id):
+    try:
+        AuthService.CreateUser(username, password, role, location_id)
+    except ValueError:
+        pass
+
+
 def Seed_Test_Data():
     Create_Tables()
 
-    Connection = Get_Connection()
-    Cursor = Connection.cursor()
+    connection = Get_Connection()
+    cursor = connection.cursor()
 
-    # Insert locations
-    Cursor.execute("INSERT OR IGNORE INTO Location (city) VALUES (?)", ("London",))
-    Cursor.execute("INSERT OR IGNORE INTO Location (city) VALUES (?)", ("Bristol",))
+    # Locations
+    cursor.execute("INSERT OR IGNORE INTO Location (city) VALUES (?)", ("London",))
+    cursor.execute("INSERT OR IGNORE INTO Location (city) VALUES (?)", ("Bristol",))
+    connection.commit()
 
-    # Insert tenants
-    Cursor.execute("""
+    london_id = _get_location_id(cursor, "London")
+    bristol_id = _get_location_id(cursor, "Bristol")
+
+    # Tenants
+    cursor.execute("""
         INSERT OR IGNORE INTO Tenant (
             ni_number, first_name, last_name, phone, email, occupation, tenant_references
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -22,7 +41,7 @@ def Seed_Test_Data():
         "john.smith@email.com", "Engineer", "Reference 1"
     ))
 
-    Cursor.execute("""
+    cursor.execute("""
         INSERT OR IGNORE INTO Tenant (
             ni_number, first_name, last_name, phone, email, occupation, tenant_references
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -31,25 +50,7 @@ def Seed_Test_Data():
         "sarah.jones@email.com", "Teacher", "Reference 2"
     ))
 
-    # Insert apartments
-    Cursor.execute("""
-        INSERT OR IGNORE INTO Apartment (
-            location_id, apartment_number, type, rooms, monthly_rent, status
-        ) VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        1, "A101", "2 Bedroom", 2, 1200.00, "OCCUPIED"
-    ))
-
-    Cursor.execute("""
-        INSERT OR IGNORE INTO Apartment (
-            location_id, apartment_number, type, rooms, monthly_rent, status
-        ) VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        2, "B202", "1 Bedroom", 1, 900.00, "OCCUPIED"
-    ))
-
-     # Insert new tenant
-    Cursor.execute("""
+    cursor.execute("""
         INSERT OR IGNORE INTO Tenant (
             ni_number, first_name, last_name, phone, email, occupation, tenant_references
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -57,76 +58,75 @@ def Seed_Test_Data():
         "EF345678A", "Michael", "Brown", "07000111222",
         "michael.brown@email.com", "Developer", "Reference 3"
     ))
- 
-    # Insert new apartment
-    Cursor.execute("""
+
+    # Apartments
+    cursor.execute("""
         INSERT OR IGNORE INTO Apartment (
             location_id, apartment_number, type, rooms, monthly_rent, status
         ) VALUES (?, ?, ?, ?, ?, ?)
     """, (
-        1, "A102", "Studio", 1, 800.00, "OCCUPIED"
+        london_id, "L101", "2 Bedroom", 2, 1200.00, "OCCUPIED"
     ))
 
-    Connection.commit()
+    cursor.execute("""
+        INSERT OR IGNORE INTO Apartment (
+            location_id, apartment_number, type, rooms, monthly_rent, status
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        bristol_id, "B202", "1 Bedroom", 1, 900.00, "OCCUPIED"
+    ))
 
-    Cursor.execute("SELECT tenant_id, first_name, last_name, ni_number FROM Tenant")
-    print("Tenants:", Cursor.fetchall())
+    cursor.execute("""
+        INSERT OR IGNORE INTO Apartment (
+            location_id, apartment_number, type, rooms, monthly_rent, status
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        london_id, "L102", "Studio", 1, 800.00, "AVAILABLE"
+    ))
 
-    Cursor.execute("SELECT apartment_id, apartment_number, type, location_id FROM Apartment")
-    print("Apartments:", Cursor.fetchall())
-    Connection.close()
+    cursor.execute("""
+        INSERT OR IGNORE INTO Apartment (
+            location_id, apartment_number, type, rooms, monthly_rent, status
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        bristol_id, "B203", "Studio", 1, 850.00, "AVAILABLE"
+    ))
 
-    # Create test users
-    try:
-        AuthService.CreateUser("maint1", "pass123", "MAINTENANCE", 1)
-    except ValueError:
-        pass
+    connection.commit()
 
-    try:
-        AuthService.CreateUser("maint2", "pass123", "MAINTENANCE", 2)
-    except ValueError:
-        pass
+    cursor.execute("SELECT tenant_id, first_name, last_name, ni_number FROM Tenant")
+    print("Tenants:", cursor.fetchall())
 
-    try:
-        AuthService.CreateUser("finance1", "pass123", "FINANCE", 1)
-    except ValueError:
-        pass
+    cursor.execute("SELECT apartment_id, apartment_number, type, location_id, status FROM Apartment")
+    print("Apartments:", cursor.fetchall())
+    connection.close()
 
-    try:
-        AuthService.CreateUser("manager1", "manager123", "MANAGER", 1)
-    except ValueError:
-        pass
+    # Clearer demo accounts by role + scope
+    _safe_create_user("maint_london", "pass123", "MAINTENANCE", london_id)
+    _safe_create_user("maint_bristol", "pass123", "MAINTENANCE", bristol_id)
 
-    try:
-        AuthService.CreateUser("frontdesk1", "pass123", "FRONT_DESK", 1)
-    except ValueError:
-        pass
+    _safe_create_user("finance_london", "pass123", "FINANCE", london_id)
+    _safe_create_user("finance_bristol", "pass123", "FINANCE", bristol_id)
 
-    try:
-        AuthService.CreateUser("frontdesk2", "pass123", "FRONT_DESK", 2)
-    except ValueError:
-        pass
+    _safe_create_user("frontdesk_london", "pass123", "FRONT_DESK", london_id)
+    _safe_create_user("frontdesk_bristol", "pass123", "FRONT_DESK", bristol_id)
 
-    try:
-        AuthService.CreateUser("admin1", "pass123", "ADMIN", 1)
-    except ValueError as e:
-        print(f"Admin seed skipped: {e}")
+    _safe_create_user("admin_london", "pass123", "ADMIN", london_id)
+    _safe_create_user("admin_bristol", "pass123", "ADMIN", bristol_id)
 
-    try:
-        AuthService.CreateUser("admin2", "pass123", "ADMIN", 2)
-    except ValueError as e:
-        print(f"Admin seed skipped: {e}")
+    _safe_create_user("manager_global", "manager123", "MANAGER", london_id)
 
     print("Test data inserted successfully.")
-    print("Maintenance login: maint1 / pass123")
-    print("Maintenance login: maint2 / pass123")
-    print("Finance login: finance1 / pass123")
-    print("Manager login: manager1 / manager123")
-    print("Admin login: admin1 / pass123")
-    print("Admin login: admin2 / pass123")
-
+    print("FRONT DESK: frontdesk_london / pass123")
+    print("FRONT DESK: frontdesk_bristol / pass123")
+    print("ADMIN: admin_london / pass123")
+    print("ADMIN: admin_bristol / pass123")
+    print("FINANCE: finance_london / pass123")
+    print("FINANCE: finance_bristol / pass123")
+    print("MAINTENANCE: maint_london / pass123")
+    print("MAINTENANCE: maint_bristol / pass123")
+    print("MANAGER: manager_global / manager123")
 
 
 if __name__ == "__main__":
     Seed_Test_Data()
-    

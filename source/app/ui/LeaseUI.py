@@ -5,8 +5,14 @@ from source.app.controllers.Lease import LeaseController
 
 class LeaseUI(tk.Toplevel):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, user=None):
         super().__init__(parent)
+
+        self.user = user or {}
+        role = self.user.get("role")
+        if role not in ("ADMIN", "MANAGER"):
+            self.destroy()
+            raise PermissionError("Only ADMIN or MANAGER users can create leases.")
 
         self.title("Create Lease")
         self.geometry("500x600")
