@@ -59,17 +59,18 @@ SQLite Database
 git clone <repo-url>
 cd Paragon
 
+## Database Setup (Seed Data)
+
+To initialise the database with test data:
+
+Delete existing database dump
+py -m source.app.databases.seed
+
 ### 2. Run the application
 
 py -m source.main
 
 ---
-
-## Database Setup (Seed Data)
-
-To initialise the database with test data:
-
-py -m source.app.databases.seed
 
 
 ### Default Test Accounts
