@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
+from datetime import datetime, timedelta
 from source.app.controllers.Tenants import TenantController
 from source.app.controllers.Complaints import ComplaintController
 from source.app.controllers.Maintenance import MaintenanceController
@@ -25,9 +26,6 @@ class TenantUI:
 
         self.build_ui()
 
-    # ============================================================
-    # Shared helpers
-    # ============================================================
     def nav_button(self, parent, text, command):
         tk.Button(parent, text=text, bg="#020617", fg="#cbd5f5", relief="flat", command=command).pack(fill="x", pady=2)
 
@@ -44,17 +42,11 @@ class TenantUI:
         return entry
 
     def _resolve_tenant_identifier(self, raw_value: str) -> int:
-        """
-        Accept either a numeric tenant_id or a tenant NI number.
-        Front-desk staff usually know NI, not DB ids, so both are supported.
-        """
         value = (raw_value or "").strip()
         if not value:
             raise ValueError("Tenant ID / NI is required.")
-
         if value.isdigit():
             return int(value)
-
         tenant = TenantController.GetTenantByNI(value)
         if not tenant:
             raise ValueError("Tenant not found.")
@@ -63,16 +55,12 @@ class TenantUI:
         return int(tenant[0])
 
     def _get_active_apartment_id(self, tenant_id: int):
-        """
-        Try the complaint helper first, then fall back to a direct DB lookup.
-        """
         try:
             apartment_id = ComplaintController.GetTenantActiveApartmentId(tenant_id)
             if apartment_id:
                 return apartment_id
         except Exception:
             pass
-
         conn = Get_Connection()
         try:
             cur = conn.cursor()
@@ -88,10 +76,35 @@ class TenantUI:
         finally:
             conn.close()
 
+    def _get_active_lease_details(self, tenant_id: int):
+        conn = Get_Connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT
+                    l.lease_id,
+                    t.first_name || ' ' || t.last_name AS full_name,
+                    t.ni_number,
+                    a.apartment_number,
+                    loc.city,
+                    l.start_date,
+                    l.end_date,
+                    l.agreed_monthly_rent,
+                    l.deposit_amount,
+                    l.status
+                FROM Lease l
+                JOIN Tenant t ON l.tenant_id = t.tenant_id
+                JOIN Apartment a ON l.apartment_id = a.apartment_id
+                JOIN Location loc ON a.location_id = loc.location_id
+                WHERE l.tenant_id = ? AND l.status = 'ACTIVE'
+                ORDER BY l.lease_id DESC
+                LIMIT 1
+            """, (tenant_id,))
+            return cur.fetchone()
+        finally:
+            conn.close()
+
     def _get_complaints_by_tenant(self, tenant_id: int):
-        """
-        ComplaintController does not expose GetComplaintsByTenant, so filter the full list here.
-        """
         rows = ComplaintController.GetComplaints()
         return [row for row in rows if int(row[1]) == int(tenant_id)]
 
@@ -100,9 +113,6 @@ class TenantUI:
         if tree:
             tree.delete(*tree.get_children())
 
-    # ============================================================
-    # UI shell
-    # ============================================================
     def build_ui(self):
         sidebar = tk.Frame(self.window, bg="#020617", width=220)
         sidebar.pack(side="left", fill="y")
@@ -119,9 +129,6 @@ class TenantUI:
         self.content.pack(side="right", fill="both", expand=True)
         self.show_tenant()
 
-    # ============================================================
-    # TENANT MANAGEMENT
-    # ============================================================
     def show_tenant(self):
         self.clear_content()
         tk.Label(self.content, text="Tenant Management", fg="white", bg="#0f172a", font=("Arial", 20, "bold")).pack(pady=10)
@@ -205,12 +212,10 @@ class TenantUI:
         data = self.tree.item(selected, "values")
         if not data:
             return
-
         fields = [self.ni, self.first, self.last, self.phone, self.email, self.occupation]
         for i, field in enumerate(fields, start=1):
             field.delete(0, tk.END)
             field.insert(0, data[i])
-
         self.requirement.delete(0, tk.END)
         self.requirement.insert(0, data[7] if len(data) > 7 else "")
         self.lease_years.delete(0, tk.END)
@@ -257,18 +262,16 @@ class TenantUI:
                       self.lease_years, self.emergency, self.notes]:
             field.delete(0, tk.END)
 
-    # ============================================================
-    # LEASE ALLOCATION
-    # ============================================================
     def show_lease_allocation(self):
         self.clear_content()
         tk.Label(self.content, text="Lease Allocation", fg="white", bg="#0f172a", font=("Arial", 20, "bold")).pack(pady=10)
 
         note = (
             "Front-desk staff can allocate an available apartment to a tenant by creating a lease. "
-            "This does not include apartment creation, apartment status management, or administrative property controls."
+            "Front desk can also capture leave requests from tenants. Administrative processing still handles "
+            "the final contract termination and penalty application."
         )
-        tk.Label(self.content, text=note, wraplength=900, justify="left", fg="#cbd5f5", bg="#0f172a").pack(padx=20, pady=(0, 12))
+        tk.Label(self.content, text=note, wraplength=980, justify="left", fg="#cbd5f5", bg="#0f172a").pack(padx=20, pady=(0, 12))
 
         form = tk.Frame(self.content, bg="#1e293b")
         form.pack(fill="x", padx=20, pady=10)
@@ -283,9 +286,20 @@ class TenantUI:
         button_row = tk.Frame(form, bg="#1e293b")
         button_row.pack(pady=10)
         tk.Button(button_row, text="Create Lease", bg="#22c55e", command=self.create_lease).pack(side="left", padx=5)
-        tk.Button(button_row, text="Load Available Apartments", bg="#3b82f6", command=self.load_available_apartments).pack(side="left", padx=5)
-        tk.Button(button_row, text="Load Leases", bg="#64748b", command=self.load_leases).pack(side="left", padx=5)
-        tk.Button(button_row, text="Clear", bg="#f59e0b", command=self.clear_lease_form).pack(side="left", padx=5)
+        tk.Button(button_row, text="Load Available Apartments", bg="#3b82f6", fg="black", command=self.load_available_apartments).pack(side="left", padx=5)
+        tk.Button(button_row, text="Load Leases", bg="#64748b", fg="black", command=self.load_leases).pack(side="left", padx=5)
+        tk.Button(button_row, text="Clear", bg="#f59e0b", fg="black", command=self.clear_lease_form).pack(side="left", padx=5)
+
+        leave_frame = tk.LabelFrame(self.content, text=" Tenant Leave Request ", bg="#1e293b", fg="#38bdf8")
+        leave_frame.pack(fill="x", padx=20, pady=(0, 10))
+        self.leave_tenant_id = self.field(leave_frame, "Tenant ID / NI")
+        self.leave_notice_date = self.field(leave_frame, "Notice Date (YYYY-MM-DD)")
+
+        leave_buttons = tk.Frame(leave_frame, bg="#1e293b")
+        leave_buttons.pack(pady=10)
+        tk.Button(leave_buttons, text="Lookup Active Lease", bg="#3b82f6", fg="black", command=self.lookup_active_lease).pack(side="left", padx=5)
+        tk.Button(leave_buttons, text="Preview Early Leave", bg="#f59e0b", fg="black", command=self.preview_early_leave).pack(side="left", padx=5)
+        tk.Button(leave_buttons, text="Record Leave Request", bg="#22c55e", fg="black", command=self.record_leave_request).pack(side="left", padx=5)
 
         tables = tk.Frame(self.content, bg="#0f172a")
         tables.pack(fill="both", expand=True, padx=20, pady=10)
@@ -303,11 +317,11 @@ class TenantUI:
         self.available_apartment_tree.pack(fill="both", expand=True, padx=6, pady=6)
         self.available_apartment_tree.bind("<<TreeviewSelect>>", self.prefill_selected_apartment)
 
-        lease_cols = ("Lease ID", "First Name", "Last Name", "Apartment", "Start", "End", "Status")
+        lease_cols = ("Lease ID", "Full Name", "NI", "Apt. No", "Location", "Start Date", "End Date", "Status")
         self.lease_table = ttk.Treeview(right, columns=lease_cols, show="headings", height=14)
         for col in lease_cols:
             self.lease_table.heading(col, text=col)
-            self.lease_table.column(col, anchor="center", width=120)
+            self.lease_table.column(col, anchor="center", width=115)
         self.lease_table.pack(fill="both", expand=True, padx=6, pady=6)
 
         self.load_available_apartments()
@@ -348,7 +362,6 @@ class TenantUI:
         data = self.tree.item(selected, "values")
         self.show_lease_allocation()
         self.lease_tenant_id.delete(0, tk.END)
-        # Insert NI because front desk naturally works with NI
         self.lease_tenant_id.insert(0, data[1])
 
     def create_lease(self):
@@ -373,17 +386,81 @@ class TenantUI:
     def load_leases(self):
         if hasattr(self, "lease_table"):
             self.lease_table.delete(*self.lease_table.get_children())
-            for lease in LeaseController.GetAllLeases():
-                self.lease_table.insert("", "end", values=lease)
+            rows = LeaseController.GetAllLeases()
+            for lease in rows:
+                lease_values = list(lease)
+                if len(lease_values) > 8:
+                    lease_values = lease_values[:8]
+                self.lease_table.insert("", "end", values=lease_values)
+
+    def lookup_active_lease(self):
+        try:
+            tenant_id = self._resolve_tenant_identifier(self.leave_tenant_id.get())
+            lease = self._get_active_lease_details(tenant_id)
+            if not lease:
+                raise ValueError("No active lease found for this tenant.")
+            lease_id, full_name, ni, apt_no, city, start_date, end_date, rent, deposit, status = lease
+            messagebox.showinfo(
+                "Active Lease",
+                f"Lease ID: {lease_id}\nTenant: {full_name}\nNI: {ni}\nApartment: {apt_no}\nLocation: {city}\n"
+                f"Start: {start_date}\nEnd: {end_date}\nMonthly Rent: £{float(rent):.2f}\nDeposit: £{float(deposit):.2f}\nStatus: {status}"
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def preview_early_leave(self):
+        try:
+            tenant_id = self._resolve_tenant_identifier(self.leave_tenant_id.get())
+            lease = self._get_active_lease_details(tenant_id)
+            if not lease:
+                raise ValueError("No active lease found for this tenant.")
+            notice_text = self.leave_notice_date.get().strip()
+            if not notice_text:
+                raise ValueError("Notice date is required.")
+            notice_date = datetime.strptime(notice_text, "%Y-%m-%d").date()
+            earliest_leave_date = notice_date + timedelta(days=30)
+            penalty = round(float(lease[7]) * 0.05, 2)
+            messagebox.showinfo(
+                "Early Leave Preview",
+                f"Lease ID: {lease[0]}\nTenant: {lease[1]}\nApartment: {lease[3]} ({lease[4]})\n\n"
+                f"Notice Given: {notice_date}\nEarliest Leave Date: {earliest_leave_date}\n"
+                f"Penalty (5% of monthly rent): £{penalty:.2f}\n\n"
+                f"This records the request. Admin should process the final termination."
+            )
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+        except Exception:
+            messagebox.showerror("Error", "Notice date must use YYYY-MM-DD format.")
+
+    def record_leave_request(self):
+        try:
+            tenant_id = self._resolve_tenant_identifier(self.leave_tenant_id.get())
+            lease = self._get_active_lease_details(tenant_id)
+            if not lease:
+                raise ValueError("No active lease found for this tenant.")
+            notice_text = self.leave_notice_date.get().strip()
+            if not notice_text:
+                raise ValueError("Notice date is required.")
+            notice_date = datetime.strptime(notice_text, "%Y-%m-%d").date()
+            earliest_leave_date = notice_date + timedelta(days=30)
+            penalty = round(float(lease[7]) * 0.05, 2)
+            messagebox.showinfo(
+                "Leave Request Recorded",
+                f"Early-leave request recorded for tenant {lease[1]}.\n\n"
+                f"Lease ID: {lease[0]}\nNotice Date: {notice_date}\nEarliest Leave Date: {earliest_leave_date}\n"
+                f"Estimated Penalty: £{penalty:.2f}\n\n"
+                f"Admin must finalise the termination and penalty processing."
+            )
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+        except Exception:
+            messagebox.showerror("Error", "Notice date must use YYYY-MM-DD format.")
 
     def clear_lease_form(self):
         for field in [self.lease_tenant_id, self.lease_apartment_id, self.lease_start, self.lease_end,
                       self.lease_deposit, self.lease_rent, self.lease_due]:
             field.delete(0, tk.END)
 
-    # ============================================================
-    # MAINTENANCE REQUESTS
-    # ============================================================
     def show_maintenance(self):
         self.clear_content()
         tk.Label(self.content, text="Maintenance Request Registration", fg="white", bg="#0f172a", font=("Arial", 20, "bold")).pack(pady=10)
@@ -406,8 +483,8 @@ class TenantUI:
         button_row = tk.Frame(form, bg="#1e293b")
         button_row.pack(pady=10)
         tk.Button(button_row, text="Create Request", bg="#22c55e", command=self.create_maintenance_request).pack(side="left", padx=5)
-        tk.Button(button_row, text="View Tenant Requests", bg="#3b82f6", command=self.load_maintenance_requests).pack(side="left", padx=5)
-        tk.Button(button_row, text="Clear", bg="#64748b", command=self.clear_maintenance_form).pack(side="left", padx=5)
+        tk.Button(button_row, text="View Tenant Requests", bg="#3b82f6", fg="black", command=self.load_maintenance_requests).pack(side="left", padx=5)
+        tk.Button(button_row, text="Clear", bg="#64748b", fg="black", command=self.clear_maintenance_form).pack(side="left", padx=5)
 
         table_frame = tk.Frame(self.content)
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
@@ -425,15 +502,9 @@ class TenantUI:
         try:
             tenant_id = self._resolve_tenant_identifier(self.maint_tenant_id.get())
             apartment_text = self.maint_apartment_id.get().strip()
-
-            if apartment_text:
-                apartment_id = int(apartment_text)
-            else:
-                apartment_id = self._get_active_apartment_id(tenant_id)
-
+            apartment_id = int(apartment_text) if apartment_text else self._get_active_apartment_id(tenant_id)
             if not apartment_id:
                 raise ValueError("No active apartment found for this tenant. Enter an apartment ID manually.")
-
             request_id = MaintenanceController.CreateRequest(
                 tenant_id,
                 int(apartment_id),
@@ -463,9 +534,6 @@ class TenantUI:
         self.maint_priority.set("LOW")
         self._safe_clear_tree("maintenance_tree")
 
-    # ============================================================
-    # COMPLAINTS
-    # ============================================================
     def show_complaints(self):
         self.clear_content()
         tk.Label(self.content, text="Complaint Registration", fg="white", bg="#0f172a", font=("Arial", 20, "bold")).pack(pady=10)
@@ -480,8 +548,8 @@ class TenantUI:
         button_row = tk.Frame(form, bg="#1e293b")
         button_row.pack(pady=10)
         tk.Button(button_row, text="Add Complaint", bg="#22c55e", command=self.add_complaint).pack(side="left", padx=5)
-        tk.Button(button_row, text="Track Tenant Complaints", bg="#3b82f6", command=self.load_complaints).pack(side="left", padx=5)
-        tk.Button(button_row, text="Clear", bg="#64748b", command=self.clear_complaint_form).pack(side="left", padx=5)
+        tk.Button(button_row, text="Track Tenant Complaints", bg="#3b82f6", fg="black", command=self.load_complaints).pack(side="left", padx=5)
+        tk.Button(button_row, text="Clear", bg="#64748b", fg="black", command=self.clear_complaint_form).pack(side="left", padx=5)
 
         table_frame = tk.Frame(self.content)
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
@@ -500,14 +568,11 @@ class TenantUI:
             description = self.complaint_description.get().strip()
             if not description:
                 raise ValueError("Complaint description is required.")
-
             tenant_id = self._resolve_tenant_identifier(self.complaint_ni.get())
             apartment_id = self._get_active_apartment_id(tenant_id)
             if not apartment_id:
                 raise ValueError("No active apartment found for this tenant.")
-
             ComplaintController.CreateComplaint(tenant_id, apartment_id, description)
-
             messagebox.showinfo("Success", "Complaint added successfully")
             self.load_complaints()
             self.clear_complaint_form()
@@ -520,7 +585,6 @@ class TenantUI:
             rows = self._get_complaints_by_tenant(tenant_id)
             self.complaint_tree.delete(*self.complaint_tree.get_children())
             for row in rows:
-                # complaint_id, tenant_id, apartment_id, description, status, created_at
                 reduced = (row[0], row[1], row[3], row[4], row[5]) if len(row) > 5 else row
                 self.complaint_tree.insert("", "end", values=reduced)
         except Exception as e:

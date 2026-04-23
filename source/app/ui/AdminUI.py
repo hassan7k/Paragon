@@ -16,6 +16,7 @@ RBAC rules (enforced via AdminController):
   MANAGER → full system view + Locations tab
 """
 
+import datetime
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from source.app.controllers.AdminController import AdminController
@@ -658,40 +659,71 @@ class AdminUI(tk.Toplevel):
             except Exception as e:
                 messagebox.showerror("Error", str(e))
 
+    from datetime import datetime, timedelta
+
     def _early_terminate_lease(self):
-        """Early termination — 1-month notice required, 5% penalty invoice created."""
+        """Early termination — 1 month notice required, 5% penalty invoice created."""
         sel = self._lea_tree.selection()
         if not sel:
             messagebox.showwarning("Warning", "Select a lease first.")
             return
-        lid = self._lea_tree.item(sel[0])["values"][0]
 
-        notice_date = simpledialog.askstring(
+        values = self._lea_tree.item(sel[0])["values"]
+        lid = values[0]
+        monthly_rent = float(values[7]) if len(values) > 7 and values[7] not in ("", None) else 0.0
+
+        notice_text = simpledialog.askstring(
             "Early Termination — Notice Date",
             "Enter the date the tenant gave notice (YYYY-MM-DD):\n\n"
-            "Note: At least 30 days must have passed since notice was given.",
+            "Rule: tenant must give 1 month notice and pays 5% of monthly rent.",
             parent=self.parent
         )
-        if not notice_date:
+        if not notice_text:
             return
 
         try:
-            result = AdminController.TerminateLeaseEarly(lid, notice_date.strip(), *self._R())
-            if result["is_early"]:
+            notice_date = datetime.strptime(notice_text.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            messagebox.showerror("Error", "Notice date must use YYYY-MM-DD format.")
+            return
+
+        earliest_leave_date = notice_date + timedelta(days=30)
+        penalty_amount = round(monthly_rent * 0.05, 2)
+
+        if not messagebox.askyesno(
+            "Confirm Early Termination",
+            f"Lease ID: {lid}\n"
+            f"Notice Date: {notice_date}\n"
+            f"Earliest Valid Leave Date: {earliest_leave_date}\n"
+            f"Penalty: £{penalty_amount:.2f}\n\n"
+            "Proceed with early termination?"
+        ):
+            return
+
+        try:
+            result = AdminController.TerminateLeaseEarly(lid, notice_date.isoformat(), *self._R())
+
+            if result.get("is_early"):
                 messagebox.showinfo(
                     "Terminated — Early",
                     f"Lease #{lid} terminated early.\n\n"
-                    f"Penalty charged:  £{result['penalty_amount']:.2f}\n"
-                    f"Penalty invoice:  #{result['penalty_invoice_id']}\n\n"
+                    f"Notice Date: {notice_date}\n"
+                    f"Earliest Valid Leave Date: {earliest_leave_date}\n"
+                    f"Penalty charged: £{result['penalty_amount']:.2f}\n"
+                    f"Penalty invoice: #{result['penalty_invoice_id']}\n\n"
                     "Apartment is now AVAILABLE."
                 )
             else:
                 messagebox.showinfo(
                     "Terminated",
-                    f"Lease #{lid} terminated (no early penalty — end date already passed).\n"
+                    f"Lease #{lid} terminated.\n"
+                    "No early penalty was applied.\n"
                     "Apartment is now AVAILABLE."
                 )
+
             self._refresh_leases()
+            self._refresh_dashboard()
+
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
